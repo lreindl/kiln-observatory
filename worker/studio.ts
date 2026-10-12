@@ -16,7 +16,8 @@ export class Studio extends DurableObject<Env> {
     const { 0: client, 1: server } = new WebSocketPair();
     this.ctx.acceptWebSocket(server);
     server.send(JSON.stringify({ type: "snapshot", snapshot: await this.snapshot() } satisfies ServerMessage));
-    await this.ensureAlarm(RECONCILE_EVERY);
+    // A new studio (or one whose counts never loaded) reconciles at once rather than in ten minutes.
+    await this.ensureAlarm((await this.ctx.storage.get("counts")) ? RECONCILE_EVERY : 1000);
     return new Response(null, { status: 101, webSocket: client });
   }
 
