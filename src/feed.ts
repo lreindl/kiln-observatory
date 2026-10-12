@@ -10,6 +10,8 @@ export interface FeedHandlers {
   snapshot(s: Snapshot): void;
   event(e: PublicEvent, replay: boolean): void;
   counts(c: Counts): void;
+  /** The studio rebuilt its history; fetch it again. */
+  history?(): void;
 }
 
 export function connect(h: FeedHandlers): void {
@@ -33,6 +35,7 @@ export function connect(h: FeedHandlers): void {
       if (msg.type === "snapshot") h.snapshot({ ...msg.snapshot, recent: msg.snapshot.recent.filter(isPublicEvent) });
       if (msg.type === "event" && isPublicEvent(msg.event)) h.event(msg.event, false);
       if (msg.type === "counts" && isCounts(msg.counts)) h.counts(msg.counts);
+      if (msg.type === "history") h.history?.();
     };
     ws.onclose = () => {
       if (!everLive && !demo) demo = startDemo(h);

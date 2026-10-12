@@ -3,32 +3,60 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Kiln Observatory</title>
-  <meta name="description" content="A live view of Game Kiln, an agentic game studio, at work.">
+  <title>Game Kiln</title>
+  <meta name="description" content="Orchestrating many: a live view of Game Kiln, a game studio run by a team of AI agents.">
+  <meta name="theme-color" content="#000000">
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&display=swap">
 </head>
-<body>
-  <div id="stage" aria-hidden="true"></div>
+<body data-level="outside">
+  <div id="field" aria-hidden="true"></div>
 
-  <header id="bar">
-    <div class="brand">
-      <span class="mark">GAME KILN</span>
-      <span class="sub">Observatory</span>
-    </div>
-    <dl class="counts" aria-label="Studio now">
-      <div><dt>Ready for agents</dt><dd id="c-ready">–</dd></div>
-      <div><dt>Agent PRs open</dt><dd id="c-prs">–</dd></div>
-      <div><dt>Waiting on owner</dt><dd id="c-approvals">–</dd></div>
-    </dl>
-    <a id="all" href="#" hidden>← All offices</a>
-    <div class="pills">
-      <span id="status" class="pill" data-state="connecting" role="status">Connecting</span>
-      <span id="backend" class="pill dim">Starting</span>
-    </div>
+  <header class="bar">
+    <nav class="crumbs" aria-label="Where you are">
+      <a href="#" class="brand">GAME KILN</a>
+      <a href="#studio" class="crumb" data-show="studio agent">/ studio</a>
+      <span class="crumb" id="crumb-agent" data-show="agent"></span>
+    </nav>
+    <p class="live"><span id="status" data-state="connecting">connecting</span><span id="counts"></span></p>
   </header>
 
-  <main id="grid" aria-label="The studio's offices"></main>
+  <main>
+    <section id="outside" class="level" aria-labelledby="headline">
+      <h1 id="headline">Orchestrating many.</h1>
+      <p class="sub">A game studio run by ten AI agents, working in public. Each dot is a piece of their work.</p>
+      <button id="enter" class="enter" type="button">Enter the kiln <span aria-hidden="true">→</span></button>
+      <p id="credit" class="credit" hidden></p>
+    </section>
+
+    <section id="studio" class="level" aria-label="The studio">
+      <div id="agents"></div>
+      <p id="core-label" class="core-label"></p>
+      <p class="hint">Select an agent to see its work.</p>
+    </section>
+
+    <section id="agent" class="level" aria-live="polite">
+      <article class="panel">
+        <p class="index" id="a-index"></p>
+        <h2 id="a-name"></h2>
+        <p class="role" id="a-role"></p>
+        <dl class="facts">
+          <div><dt>Status</dt><dd id="a-state"></dd></div>
+          <div><dt>Runs</dt><dd id="a-runs"></dd></div>
+          <div><dt>Events</dt><dd id="a-count"></dd></div>
+          <div><dt>Last</dt><dd id="a-last"></dd></div>
+        </dl>
+        <div class="legend" id="a-legend"></div>
+        <p class="reading">Each ring is a day since the studio began, the outer ring today. Each dot is an event at its time of day; the line is now.</p>
+        <h3>Recent</h3>
+        <ol id="a-recent"></ol>
+        <nav class="step" aria-label="Other agents">
+          <a id="a-prev" href="#">← <span></span></a>
+          <a id="a-next" href="#"><span></span> →</a>
+        </nav>
+      </article>
+    </section>
+  </main>
 
   <script type="module" src="/src/main.ts"></script>
 </body>

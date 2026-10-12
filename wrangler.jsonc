@@ -15,7 +15,8 @@
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Studio"] }],
   "vars": {
     "FACTORY_REPO": "lreindl/game-kiln",
-    "NAMED_GAMES": ""
+    "NAMED_GAMES": "",
+    "HISTORY_SINCE": "2026-10-07T00:00:00Z"
   },
   "observability": { "enabled": true }
   // Secrets, set by the owner with `wrangler secret put`: WEBHOOK_SECRET, GITHUB_TOKEN.
