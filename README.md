@@ -3,14 +3,12 @@
 A live view of **Game Kiln**, an agentic game studio. Scheduled Claude Code
 routines (an analyst, ops, growth, a quality auditor, a PM, an implementer, a
 reviewer, release and an approval digest) build and run mobile games, handing
-work to each other through GitHub. The Observatory gives each of them, and
-the owner, an office of their own, side by side in a responsive grid: a night
-penthouse, an archive library, a network operations centre, a rooftop
-billboard, a clean room, a war room, a pneumatic mail room, a workshop, a zen
-study and the Kiln itself. Each room has its own animation for working and for
-finishing a piece of work, driven by the studio's real activity and the
-routines' schedules. Select an office to preview it; `#<office>` (for example
-`#release`) opens one on its own.
+work to each other through GitHub. The Observatory is a
+black field of white dots and hairline geometry, in three levels you zoom
+between: outside the kiln, inside the studio with its ten agents, and one
+agent's record, drawn as rings of days with a dot for every event. Live events
+travel between the agents as packets of dots. `#studio` and `#agent-<id>`
+(for example `#agent-implementer`) link straight to a level.
 
 It shows **activity only**: what the agents do, never what they write. The
 studio's repos are private; titles, bodies, numbers, branch names and money
@@ -29,14 +27,17 @@ private repos ──webhooks──▶ Worker ──allowlist──▶ Studio (Du
   GitHub webhook. Nothing in the payload is copied through, and
   `shared/public.ts#isPublicEvent` rejects any event with an unknown key or a
   value outside its allowed set, both before storing and before broadcasting.
-- **`worker/studio.ts`** holds the state and pushes changes over hibernating
-  WebSockets. Its alarm rebuilds the game list (from the studio's
-  `games.yaml`) and the counts from the GitHub API, so a missed webhook heals.
-- **`src/`** is the site: one three.js WebGPU renderer (WebGL 2 fallback)
-  behind a CSS grid, drawing each office's own scene into its cell with
-  scissor rendering. The offices live in `src/offices/`, one file each, on a
-  shared base class in `kit.ts`. Without a reachable Worker the site runs a
-  labelled demo feed.
+- **`worker/studio.ts`** keeps every public event in the Durable Object's
+  SQLite and pushes changes over hibernating WebSockets. Its alarm rebuilds the
+  game list and the counts from the GitHub API, so a missed webhook heals.
+- **`worker/backfill.ts`** rebuilds history once, back to `HISTORY_SINCE`: each
+  issue, pull request, review, label and release run becomes the webhook
+  payload GitHub would have sent and goes through the same allowlist.
+  `/api/history` serves it.
+- **`src/`** is the site, on a plain 2D canvas: `field.ts` is a pool of dots
+  springing between formations under a zooming camera, `shapes.ts` samples the
+  kiln and the agents' figures into dots, `levels.ts` lays out each level for
+  the viewport. Without a reachable Worker the site shows labelled demo data.
 
 ## Develop
 
@@ -62,7 +63,7 @@ WEBHOOK_SECRET=local-dev-only
    - `npx wrangler secret put WEBHOOK_SECRET`: a long random string.
    - `npx wrangler secret put GITHUB_TOKEN`: a fine-grained token, read-only,
      for `game-kiln` and each game repo, with *Contents*, *Issues*, *Pull
-     requests* and *Metadata*.
+     requests* and *Metadata* (add *Actions* to backfill past release runs).
 3. On `lreindl/game-kiln` and each repo in its `games.yaml`, add a webhook:
    payload URL `https://<worker>/api/webhook`, content type
    `application/json`, the same secret, and the events *Issues*, *Pull

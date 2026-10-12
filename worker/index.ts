@@ -17,6 +17,8 @@ export interface Env {
   FACTORY_REPO: string;
   /** Comma-separated game ids whose store listing is public, so their names may show. */
   NAMED_GAMES?: string;
+  /** ISO date the backfill starts from: when the studio began. */
+  HISTORY_SINCE: string;
 }
 
 export default {
@@ -41,6 +43,7 @@ export default {
     }
 
     if (url.pathname === "/api/live") return studio.fetch(request);
+    if (url.pathname === "/api/history") return Response.json({ events: await studio.history() }, { headers: { "Cache-Control": "public, max-age=30" } });
     if (url.pathname === "/api/state") return Response.json(await studio.snapshot(), { headers: { "Cache-Control": "no-store" } });
     if (url.pathname.startsWith("/api/")) return new Response("Not found", { status: 404 });
     return env.ASSETS.fetch(request);

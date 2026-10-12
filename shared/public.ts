@@ -55,7 +55,9 @@ export interface Snapshot {
 export type ServerMessage =
   | { type: "snapshot"; snapshot: Snapshot }
   | { type: "event"; event: PublicEvent }
-  | { type: "counts"; counts: Counts };
+  | { type: "counts"; counts: Counts }
+  /** History was rebuilt; fetch /api/history again. */
+  | { type: "history" };
 
 export const GAME_LABEL = /^(factory|game-\d{1,3}|[A-Za-z0-9][A-Za-z0-9 :'&!.-]{0,39})$/;
 const ITEM = /^[0-9a-f]{12}$/;
