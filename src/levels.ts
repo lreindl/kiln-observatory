@@ -2,96 +2,174 @@
 // World origin is the centre of the screen at camera scale 1.
 
 import type { PublicEvent } from "../shared/public";
-import { CELLS, weight, type CellId } from "./crew";
+import { CELLS, cellFor, weight, type CellId } from "./crew";
 import type { FPoint, Formation, Guide } from "./field";
-import { circle, glyph, kiln, line, type Pt } from "./shapes";
+import { electricKiln, rng } from "./kiln";
+import { circle, glyph, line, resample, type Pt } from "./shapes";
 
 export const HISTORY_START = Date.UTC(2026, 9, 7);
 const DAY = 86_400_000;
 
 // ---------- outside ----------
 
-export interface Outside { formation: Formation; door: Pt; doorZoom: number }
+export interface Outside { formation: Formation; opening: Pt; diveZoom: number }
 
 export function outside(w: number, h: number): Outside {
   const portrait = w < h;
-  const H = Math.min(h * (portrait ? 0.42 : 0.56), w * (portrait ? 0.8 : 0.5));
-  const ground = H * (portrait ? 0.12 : 0.36);
-  const cx = 0;
-  const k = kiln(cx, ground, H, Math.max(3.4, H / 120));
-  const points: FPoint[] = [
-    ...k.outline.map((p) => ({ ...p, size: 1.35, alpha: 0.95, group: "kiln" })),
-    ...k.courses.map((p) => ({ ...p, size: 0.9, alpha: 0.32, group: "kiln" })),
-  ];
-  const door = { x: cx, y: k.door.y + k.door.h * 0.6 };
-  const right = cx + k.halfBase + H * (portrait ? 0.06 : 0.12);
+  const H = portrait ? Math.min(w * 0.42, h * 0.2) : Math.min(h * 0.24, w * 0.28);
+  const ground = portrait ? h * 0.04 : h * 0.1;
+  const k = electricKiln(0, ground, H, Math.max(2.4, H / 70));
+  const points: FPoint[] = k.dots.map((d) => ({ ...d, group: "kiln" }));
+  const b = k.bounds;
+  const dimX = b.right + H * 0.16;
   const guides: Guide[] = [
-    { kind: "line", a: { x: -w, y: ground }, b: { x: w, y: ground }, alpha: 0.22 },
-    { kind: "line", a: { x: cx, y: k.top - H * 0.12 }, b: { x: cx, y: ground + H * 0.08 }, alpha: 0.14, dash: [2, 6] },
-    { kind: "ellipse", c: { x: k.rim.x, y: k.rim.y }, rx: k.rim.rx, ry: k.rim.ry, alpha: 0.35 },
-    { kind: "circle", c: door, r: k.door.w * 1.6, alpha: 0.12, dash: [2, 5] },
-    { kind: "circle", c: door, r: k.door.w * 3.4, alpha: 0.07, dash: [1, 7] },
-    // Dimension line with ticks.
-    { kind: "line", a: { x: right, y: k.top }, b: { x: right, y: ground }, alpha: 0.25 },
-    { kind: "line", a: { x: right - 6, y: k.top }, b: { x: right + 6, y: k.top }, alpha: 0.25 },
-    { kind: "line", a: { x: right - 6, y: ground }, b: { x: right + 6, y: ground }, alpha: 0.25 },
-    { kind: "text", at: { x: right + 10, y: (k.top + ground) / 2 }, text: "H 14.0 m", alpha: 0.35 },
-    portrait
-      ? { kind: "text", at: { x: cx, y: k.top - H * 0.06 }, text: "KILN 01 · BOTTLE TYPE", alpha: 0.32, align: "center" }
-      : { kind: "text", at: { x: cx - k.halfBase - H * 0.1, y: k.top + 4 }, text: "KILN 01 · BOTTLE TYPE", alpha: 0.32, align: "right" },
-    { kind: "text", at: { x: cx + k.door.w * 1.7, y: door.y - k.door.w * 1.2 }, text: "ENTRY", alpha: 0.3 },
+    { kind: "line", a: { x: -w, y: k.floor }, b: { x: w, y: k.floor }, alpha: 0.22 },
+    { kind: "line", a: { x: 0, y: b.top - H * 0.1 }, b: { x: 0, y: ground + H * 0.12 }, alpha: 0.12, dash: [2, 6] },
+    // Height, from the floor to the rim.
+    { kind: "line", a: { x: dimX, y: ground - H }, b: { x: dimX, y: ground }, alpha: 0.25 },
+    { kind: "line", a: { x: dimX - 5, y: ground - H }, b: { x: dimX + 5, y: ground - H }, alpha: 0.25 },
+    { kind: "line", a: { x: dimX - 5, y: ground }, b: { x: dimX + 5, y: ground }, alpha: 0.25 },
+    { kind: "text", at: { x: dimX + 9, y: ground - H / 2 + 3 }, text: "H 1.2 m", alpha: 0.35 },
+    // Width, under the floor line.
+    { kind: "line", a: { x: b.left, y: k.floor + H * 0.1 }, b: { x: b.right, y: k.floor + H * 0.1 }, alpha: 0.2 },
+    { kind: "line", a: { x: b.left, y: k.floor + H * 0.1 - 5 }, b: { x: b.left, y: k.floor + H * 0.1 + 5 }, alpha: 0.2 },
+    { kind: "line", a: { x: b.right, y: k.floor + H * 0.1 - 5 }, b: { x: b.right, y: k.floor + H * 0.1 + 5 }, alpha: 0.2 },
+    { kind: "text", at: { x: (b.left + b.right) / 2, y: k.floor + H * 0.1 + 14 }, text: "W 0.9 m", alpha: 0.3, align: "center" },
+    { kind: "text", at: { x: portrait ? 0 : b.left - H * 0.12, y: portrait ? b.top - 12 : b.top + H * 0.2 }, text: "KILN 01 · ELECTRIC · 3 SECTIONS", alpha: 0.32, align: portrait ? "center" : "right" },
+    { kind: "circle", c: k.opening, r: H * 0.75, alpha: 0.07, dash: [1, 6] },
   ];
-  return { formation: { points, guides, groups: { kiln: { x: cx, y: ground - H / 2 } } }, door, doorZoom: Math.max(12, (Math.min(w, h) * 0.9) / k.door.w) };
+  return { formation: { points, guides, groups: { kiln: { x: 0, y: ground - H } } }, opening: k.opening, diveZoom: Math.max(14, Math.min(w, h) / (H * 0.2)) };
 }
 
-// ---------- the studio ----------
+// ---------- the agents: a folder tree ----------
 
 export interface Studio {
   formation: Formation;
+  /** Glyph radius. */
   r: number;
+  /** Glyph centres. */
   agents: Record<CellId, Pt>;
+  /** Where each agent's label starts, and the row height. */
+  labels: Record<CellId, Pt>;
+  rowH: number;
+  /** The kiln at the root of the tree, and the scale that makes it fill the screen. */
   core: Pt;
-  coreR: number;
+  coreZoom: number;
+  folder: Pt;
+  /** Each agent's circuit back up to the kiln: glyph, pad, bus, folder, trunk, root. */
+  up: Record<CellId, Pt[]>;
+  stripX: number;
 }
 
-export function studio(w: number, h: number): Studio {
-  const portrait = w < h * 0.9;
-  const rx = portrait ? w * 0.34 : Math.min(w * 0.36, h * 0.52);
-  const ry = portrait ? Math.min(h * 0.31, w * 0.62) : h * 0.33;
-  const r = Math.max(13, Math.min(30, Math.min(w, h) * 0.038));
-  const step = Math.max(2.6, r / 7.5);
-  const agents = {} as Record<CellId, Pt>;
+/** How many events an agent had on each of the last `days` days, oldest first. */
+function perDay(events: PublicEvent[], id: CellId, days: number, now: number): number[] {
+  const out = new Array(days).fill(0);
+  const today = Math.floor(now / DAY);
+  for (const e of events) {
+    if (cellFor(e) !== id) continue;
+    const ago = today - Math.floor(Date.parse(e.at) / DAY);
+    if (ago >= 0 && ago < days) out[days - 1 - ago]++;
+  }
+  return out;
+}
+
+export function studio(w: number, h: number, events: PublicEvent[] = [], now = Date.now()): Studio {
+  const narrow = w < 640;
+  const days = narrow ? 7 : 14;
+  const colW = narrow ? 8 : 10;
+  // Centre the tree on its contents: trunk, pads, figures, labels, strips.
+  const content = (narrow ? 34 + 22 + 18 + 18 + 112 : 46 + 30 + 22 + 18 + 196) + days * colW;
+  const left = -Math.min(w - 36, content) / 2;
+  const top = -h / 2 + (narrow ? 84 : 96);
+  const bottom = h / 2 - (narrow ? 56 : 64);
+  const kh = narrow ? 30 : 40;
+  const step = 2.2;
   const points: FPoint[] = [];
+  const guides: Guide[] = [];
   const groups: Record<string, Pt> = {};
-  const guides: Guide[] = [
-    { kind: "ellipse", c: { x: 0, y: 0 }, rx, ry, alpha: 0.1, dash: [2, 6] },
-    { kind: "ellipse", c: { x: 0, y: 0 }, rx: rx * 1.18, ry: ry * 1.18, alpha: 0.06 },
-    { kind: "line", a: { x: -rx * 1.3, y: 0 }, b: { x: rx * 1.3, y: 0 }, alpha: 0.06 },
-    { kind: "line", a: { x: 0, y: -ry * 1.3 }, b: { x: 0, y: ry * 1.3 }, alpha: 0.06 },
-  ];
-  CELLS.forEach((c, i) => {
-    const a = -Math.PI / 2 + (i / CELLS.length) * Math.PI * 2;
-    const p = { x: Math.cos(a) * rx, y: Math.sin(a) * ry };
-    agents[c.id] = p;
-    groups[c.id] = p;
-    for (const q of glyph(c.id, p.x, p.y, r, step)) points.push({ ...q, size: 1.25, alpha: 0.95, group: c.id });
-    // A dotted spoke from the core to each agent.
-    const from = { x: p.x * 0.2, y: p.y * 0.2 }, to = { x: p.x * (1 - (r * 1.9) / Math.hypot(p.x, p.y)), y: p.y * (1 - (r * 1.9) / Math.hypot(p.x, p.y)) };
-    for (const q of line(from, to, step * 3.2)) points.push({ ...q, size: 0.8, alpha: 0.28 });
-    guides.push({ kind: "text", at: { x: p.x - r * 1.5, y: p.y - r * 1.15 }, text: `A-${String(i + 1).padStart(2, "0")}`, alpha: 0.25, align: "right", size: 9 });
+  const trace = (pts: Pt[], group: string, alpha = 0.55) => { for (const p of resample(pts, step * 1.5)) points.push({ ...p, size: 0.85, alpha, group }); };
+  const via = (p: Pt, group: string) => { for (const q of circle(p.x, p.y, 3.2, 1.6)) points.push({ ...q, size: 0.7, alpha: 0.9, group }); points.push({ ...p, size: 1.1, alpha: 1, group }); };
+
+  // The root: a small kiln.
+  const groundY = top + kh * 2.05;
+  const kx = left + kh * 0.62;
+  const k = electricKiln(kx, groundY, kh, 1.5, 0.45, 9);
+  for (const d of k.dots) points.push({ ...d, size: d.size * 0.8, group: "root" });
+  const core = { x: kx, y: groundY - kh * 0.9 };
+  groups.root = core;
+  guides.push({ kind: "text", at: { x: k.bounds.right + 14, y: groundY - kh * 0.45 }, text: "game-kiln/", alpha: 0.85, size: narrow ? 11 : 12 });
+
+  // Trunk from the kiln down to agents/.
+  const rows = CELLS.length;
+  const rowH = Math.min(narrow ? 52 : 58, (bottom - (groundY + 40)) / (rows + 0.6));
+  const folder = { x: left + (narrow ? 34 : 46), y: groundY + rowH * 0.9 };
+  const c = 7;
+  const trunk = [{ x: kx, y: groundY + 6 }, { x: kx, y: folder.y - c }, { x: kx + c, y: folder.y }, { x: folder.x - 4, y: folder.y }];
+  trace(trunk, "trunk");
+  groups.trunk = folder;
+  via(folder, "trunk");
+  guides.push({ kind: "text", at: { x: folder.x + 12, y: folder.y + 4 }, text: "agents/", alpha: 0.85, size: narrow ? 11 : 12 });
+
+  // The bus, and a branch to each agent.
+  const rows0 = folder.y;
+  const r = narrow ? 9 : 11;
+  const busX = folder.x;
+  const padX = busX + (narrow ? 22 : 30);
+  const lastY = rows0 + rowH * rows;
+  trace([{ x: busX, y: rows0 + 4 }, { x: busX, y: lastY - c }], "bus");
+  groups.bus = folder;
+  const labelX = padX + r * 2 + 18;
+  const stripX = labelX + (narrow ? 112 : 196);
+  const agents = {} as Record<CellId, Pt>;
+  const labels = {} as Record<CellId, Pt>;
+  const up = {} as Record<CellId, Pt[]>;
+  CELLS.forEach((cell, i) => {
+    const y = rows0 + rowH * (i + 1);
+    const g = { x: padX + r + 10, y };
+    agents[cell.id] = g;
+    labels[cell.id] = { x: labelX, y };
+    groups[cell.id] = g;
+    trace([{ x: busX, y: y - c }, { x: busX + c, y }, { x: padX - 3.5, y }], `trace-${cell.id}`);
+    groups[`trace-${cell.id}`] = { x: busX, y };
+    via({ x: padX, y }, `trace-${cell.id}`);
+    for (const q of glyph(cell.id, g.x, g.y, r, Math.max(1.4, r / 6))) points.push({ ...q, size: 0.95, alpha: 0.95, group: cell.id });
+    up[cell.id] = [{ x: g.x - r - 2, y }, { x: padX, y }, { x: busX + c, y }, { x: busX, y: y - c }, { x: busX, y: rows0 }, ...trunk.slice().reverse(), core];
+    // Activity: a halo of dust around the figure, denser the busier the agent, and a
+    // dot matrix of the last days, densest where the work was.
+    const daily = perDay(events, cell.id, days, now);
+    const total = daily.reduce((a, b) => a + b, 0);
+    const random = rng(i + 1);
+    for (let k2 = 0; k2 < Math.min(70, total * 3); k2++) {
+      const a = random() * Math.PI * 2, rr = r * (1.25 + Math.sqrt(random()) * 0.75);
+      points.push({ x: g.x + Math.cos(a) * rr, y: g.y + Math.sin(a) * rr, size: 0.5, alpha: 0.3, group: `halo-${cell.id}` });
+    }
+    groups[`halo-${cell.id}`] = g;
+    daily.forEach((n, d) => {
+      for (let k2 = 0; k2 < 6; k2++) {
+        const lit = k2 < n;
+        points.push({ x: stripX + d * colW, y: y + 9 - k2 * 3.8, size: lit ? 1.25 : 0.65, alpha: lit ? 0.95 : 0.2, group: `strip-${cell.id}` });
+      }
+    });
+    groups[`strip-${cell.id}`] = { x: stripX, y };
+    guides.push({ kind: "line", a: { x: labelX, y: y + rowH / 2 }, b: { x: stripX + days * colW, y: y + rowH / 2 }, alpha: 0.05 });
   });
-  // The kiln at the centre: the studio's core.
-  const coreH = r * 3.6;
-  const k = kiln(0, coreH * 0.45, coreH, step * 0.85);
-  for (const q of k.outline) points.push({ ...q, size: 1.15, alpha: 0.9, group: "core" });
-  groups.core = { x: 0, y: 0 };
-  guides.push({ kind: "circle", c: { x: 0, y: 0 }, r: coreH * 0.75, alpha: 0.1, dash: [1, 4] });
-  return { formation: { points, guides, groups }, r, agents, core: { x: 0, y: -coreH * 0.05 }, coreR: coreH * 0.6 };
+  guides.push({ kind: "text", at: { x: stripX, y: rows0 + 4 }, text: `last ${days} days`, alpha: 0.3, size: 10 });
+  const coreZoom = Math.max(10, (Math.min(w, h) * 0.55) / kh);
+  return { formation: { points, guides, groups }, r, agents, labels, rowH, core, coreZoom, folder, up, stripX };
+}
+
+/** The circuit from one agent to another: up to agents/, then down. */
+export function route(st: Studio, from: CellId | "core", to: CellId | "core"): Pt[] {
+  const toFolder = (id: CellId) => st.up[id].slice(0, 5);
+  if (from === "core" && to === "core") return [st.core, st.core];
+  if (to === "core") return st.up[from as CellId];
+  if (from === "core") return st.up[to].slice().reverse();
+  return [...toFolder(from), ...toFolder(to).slice().reverse()];
 }
 
 // ---------- one agent ----------
 
-export interface AgentView { formation: Formation; camera: { x: number; y: number; s: number }; screen: Pt; ringR: number }
+export interface AgentView { formation: Formation; camera: { x: number; y: number; s: number } }
 
 /** Local time of day as an angle, midnight at the top. */
 const dayAngle = (t: number) => {
@@ -100,20 +178,22 @@ const dayAngle = (t: number) => {
 };
 
 /**
- * The agent's figure, large, wrapped in rings of days: each ring is a day since
- * the studio began (oldest inside), each dot an event at its time of day.
+ * The agent's figure, large, wrapped in rings of days: each ring a day since
+ * the studio began (oldest inside), each dot an event at its time of day. Its
+ * circuit back to agents/ and the kiln stays lit.
  */
-export function agent(w: number, h: number, st: Studio, id: CellId, events: PublicEvent[], now: number): AgentView {
+export function agent(w: number, h: number, st: Studio, id: CellId, events: PublicEvent[], all: PublicEvent[], now: number): AgentView {
   const portrait = w < h * 0.9;
   const screen = portrait ? { x: w / 2, y: h * 0.3 } : { x: w * 0.32, y: h / 2 + 10 };
   const ringScreen = portrait ? Math.min(w * 0.38, h * 0.22) : Math.min(h * 0.34, w * 0.24);
-  const s = Math.max(2.4, Math.min(8, (ringScreen * 0.33) / st.r));
+  const s = Math.max(2.4, Math.min(9, (ringScreen * 0.3) / st.r));
   const c = st.agents[id];
   const camera = { x: c.x - (screen.x - w / 2) / s, y: c.y - (screen.y - h / 2) / s, s };
-  const base = studio(w, h).formation;
-  // Swap in a denser version of this agent's figure.
-  const points: FPoint[] = base.points.filter((p) => p.group !== id);
-  for (const q of glyph(id, c.x, c.y, st.r, Math.max(1.2, st.r / 16))) points.push({ ...q, size: 0.9, alpha: 1, group: id });
+  const base = studio(w, h, all, now).formation;
+  // This agent's own dots come first, so they always get a dot from the pool; the
+  // other rows keep their figures and traces but not their strips and halos.
+  const points: FPoint[] = [];
+  const rest = base.points.filter((p) => p.group !== id && !(p.group && /^(strip|halo)-/.test(p.group) && !p.group.endsWith(`-${id}`)));
 
   const R0 = st.r * 1.75, R1 = ringScreen / s;
   const days = Math.max(7, Math.ceil((now - HISTORY_START) / DAY));
@@ -126,25 +206,32 @@ export function agent(w: number, h: number, st: Studio, id: CellId, events: Publ
     guides.push({ kind: "line", a: { x: c.x + Math.cos(a) * inner, y: c.y + Math.sin(a) * inner }, b: { x: c.x + Math.cos(a) * outer, y: c.y + Math.sin(a) * outer }, alpha: hr % 6 === 0 ? 0.35 : 0.15 });
     if (hr % 6 === 0) guides.push({ kind: "text", at: { x: c.x + Math.cos(a) * (outer + 1.6 * dr), y: c.y + Math.sin(a) * (outer + 1.6 * dr) + 3 }, text: String(hr).padStart(2, "0"), alpha: 0.4, align: "center", size: 9 });
   }
-  // The hand: now.
   const na = dayAngle(now);
   guides.push({ kind: "line", a: { x: c.x + Math.cos(na) * R0, y: c.y + Math.sin(na) * R0 }, b: { x: c.x + Math.cos(na) * (R1 + 2.6 * dr), y: c.y + Math.sin(na) * (R1 + 2.6 * dr) }, alpha: 0.5 });
-  // Scheduled runs, as dotted rays on today's ring.
   const cell = CELLS.find((x) => x.id === id)!;
   const today = Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), new Date(now).getUTCDate());
   for (const [hh, mm] of cell.times) {
     const a = dayAngle(today + (hh * 60 + mm) * 60_000);
     for (const q of line({ x: c.x + Math.cos(a) * (R1 - dr * 0.5), y: c.y + Math.sin(a) * (R1 - dr * 0.5) }, { x: c.x + Math.cos(a) * (R1 + dr * 1.8), y: c.y + Math.sin(a) * (R1 + dr * 1.8) }, dr * 0.45)) points.push({ ...q, size: 0.8, alpha: 0.6, group: `${id}-hist` });
   }
+  // Every event a dot, with a little dust around it, so busy hours read as dense.
+  let seed = 11;
+  const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
   for (const e of events) {
     const t = Date.parse(e.at);
     const d = Math.min(days - 1, Math.max(0, Math.floor((t - HISTORY_START) / DAY)));
     const a = dayAngle(t);
     const rr = R0 + (d + 0.5) * dr;
     const wt = weight(e);
-    points.push({ x: c.x + Math.cos(a) * rr, y: c.y + Math.sin(a) * rr, size: wt.size * Math.min(1, dr * s / 9) + 0.3, alpha: wt.alpha, group: `${id}-hist` });
+    const p = { x: c.x + Math.cos(a) * rr, y: c.y + Math.sin(a) * rr };
+    points.push({ ...p, size: wt.size * Math.min(1, (dr * s) / 9) + 0.3, alpha: wt.alpha, group: `${id}-hist` });
+    for (let k = 0; k < 3; k++) points.push({ x: p.x + (rnd() - 0.5) * dr * 1.6, y: p.y + (rnd() - 0.5) * dr * 1.6, size: 0.45, alpha: 0.28, group: `${id}-hist` });
   }
   for (const q of circle(c.x, c.y, R1 + 2.6 * dr, Math.max(dr * 0.8, 2 / s))) points.push({ ...q, size: 0.6, alpha: 0.22, group: `${id}-hist` });
-  const groups = { ...base.groups, [`${id}-hist`]: c };
-  return { formation: { points, guides: [...base.guides.filter((g) => g.kind !== "text"), ...guides], groups }, camera, screen, ringR: ringScreen };
+  // A denser figure for this agent, and its circuit home, brighter.
+  for (const q of glyph(id, c.x, c.y, st.r, Math.max(0.5, st.r / 22))) points.push({ ...q, size: 0.75, alpha: 1, group: id });
+  for (const q of resample(st.up[id], 1.4)) points.push({ ...q, size: 0.6, alpha: 0.9, group: `${id}-home` });
+  points.push(...rest);
+  const groups = { ...base.groups, [`${id}-hist`]: c, [`${id}-home`]: c };
+  return { formation: { points, guides: [...base.guides.filter((g) => g.kind !== "text"), ...guides], groups }, camera };
 }

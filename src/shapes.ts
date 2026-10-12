@@ -47,58 +47,6 @@ export function regular(cx: number, cy: number, r: number, sides: number, rot: n
 export const rect = (x: number, y: number, w: number, h: number, step: number) =>
   poly([{ x, y }, { x: x + w, y }, { x: x + w, y: y + h }, { x, y: y + h }], step);
 
-// ---------- the kiln ----------
-
-// A bottle kiln's right-hand profile: [half-width, height], both as fractions of the kiln's height.
-const PROFILE: [number, number][] = [[0.3, 0], [0.32, 0.05], [0.315, 0.16], [0.28, 0.34], [0.21, 0.55], [0.13, 0.76], [0.095, 0.88], [0.1, 0.95], [0.12, 0.985], [0.12, 1]];
-
-function profileAt(t: number): number {
-  for (let i = 0; i < PROFILE.length - 1; i++) {
-    const [w0, h0] = PROFILE[i], [w1, h1] = PROFILE[i + 1];
-    if (t <= h1) {
-      const k = (t - h0) / (h1 - h0);
-      return w0 + (w1 - w0) * (k * k * (3 - 2 * k));
-    }
-  }
-  return PROFILE[PROFILE.length - 1][0];
-}
-
-export interface Kiln {
-  outline: Pt[];
-  courses: Pt[];
-  door: { x: number; y: number; w: number; h: number };
-  rim: { x: number; y: number; rx: number; ry: number };
-  top: number;
-  halfBase: number;
-}
-
-/** A bottle kiln standing on `ground`, centred on `cx`, `h` tall. */
-export function kiln(cx: number, ground: number, h: number, step: number): Kiln {
-  const right: Pt[] = [];
-  for (let t = 0; t <= 1.0001; t += 0.01) right.push({ x: cx + profileAt(t) * h, y: ground - t * h });
-  const left = right.map((p) => ({ x: 2 * cx - p.x, y: p.y })).reverse();
-  const doorW = h * 0.15, doorH = h * 0.2;
-  const door = { x: cx - doorW / 2, y: ground - doorH, w: doorW, h: doorH };
-  // Outline: up the right side, across the rim, down the left; the door arch cut into the base.
-  const outline = [
-    ...resample(right, step),
-    ...resample(left, step),
-    ...line({ x: cx - profileAt(0) * h, y: ground }, { x: door.x, y: ground }, step),
-    ...line({ x: door.x + door.w, y: ground }, { x: cx + profileAt(0) * h, y: ground }, step),
-    ...line({ x: door.x, y: ground }, { x: door.x, y: ground - doorH + doorW / 2 }, step),
-    ...arc(cx, ground - doorH + doorW / 2, doorW / 2, Math.PI, Math.PI * 2, step),
-    ...line({ x: door.x + door.w, y: ground - doorH + doorW / 2 }, { x: door.x + door.w, y: ground }, step),
-  ];
-  // Brick courses: sparse dotted bands across the body.
-  const courses: Pt[] = [];
-  for (const t of [0.12, 0.24, 0.36, 0.48, 0.6, 0.7]) {
-    const half = profileAt(t) * h * 0.92;
-    const y = ground - t * h;
-    for (const p of line({ x: cx - half, y }, { x: cx + half, y }, step * 1.6)) if (!(t < 0.2 && Math.abs(p.x - cx) < doorW * 0.7)) courses.push(p);
-  }
-  return { outline, courses, door, rim: { x: cx, y: ground - h, rx: profileAt(1) * h, ry: h * 0.022 }, top: ground - h, halfBase: profileAt(0.05) * h };
-}
-
 // ---------- agent glyphs ----------
 
 /** Each agent's figure, centred on (cx, cy) with radius r. No two alike. */

@@ -55,16 +55,21 @@ h1 { margin: 0; font-weight: 300; font-size: clamp(26px, 4.4vw, 52px); letter-sp
 /* Studio */
 #agents { position: absolute; inset: 0; pointer-events: none; }
 .agent-btn {
-  position: absolute; left: 0; top: 0; background: none; border: 0; padding: 0; cursor: pointer; pointer-events: auto;
-  display: grid; justify-items: center; gap: 2px; text-align: center;
+  position: absolute; background: none; border: 0; margin: 0; cursor: pointer; pointer-events: auto;
+  display: flex; align-items: center; gap: 14px; text-align: left; padding-right: 0;
 }
-.agent-btn .hit { display: block; border-radius: 50%; }
-.agent-btn .name { font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; white-space: nowrap; }
-.agent-btn .state { font-size: 10px; color: var(--faint); white-space: nowrap; }
+.agent-btn .name { font-size: 11.5px; letter-spacing: .12em; text-transform: uppercase; white-space: nowrap; width: 9.5em; }
+.agent-btn .state { font-size: 10.5px; color: var(--faint); white-space: nowrap; }
 .agent-btn.working .state { color: var(--ink); }
 .agent-btn:hover .name, .agent-btn:focus-visible .name { text-decoration: underline; text-underline-offset: 4px; }
 .agent-btn:focus-visible { outline: none; }
-.core-label { position: absolute; margin: 0; transform: translate(-50%, 0); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); white-space: nowrap; text-align: center; }
+.agent-btn:hover, .agent-btn:focus-visible { background: linear-gradient(90deg, rgba(255,255,255,.05), transparent 80%); }
+.core-label { position: absolute; margin: 0; font-size: 10.5px; letter-spacing: .08em; color: var(--faint); white-space: nowrap; }
+@media (max-width: 640px) {
+  .agent-btn { flex-direction: column; align-items: flex-start; justify-content: center; gap: 0; }
+  .agent-btn .name { width: auto; font-size: 10.5px; }
+  .agent-btn .state { font-size: 9.5px; }
+}
 .hint { position: absolute; bottom: calc(env(safe-area-inset-bottom, 0px) + 18px); left: 0; right: 0; margin: 0; text-align: center; color: var(--faint); font-size: 11px; }
 
 /* Agent */

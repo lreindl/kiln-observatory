@@ -5,19 +5,20 @@ import { CELLS, cellFor, describe, flow, schedule, weight, type CellId } from ".
 import { demoHistory } from "./demo";
 import { connect, type Status } from "./feed";
 import { Field } from "./field";
-import { agent, outside, studio, type Studio } from "./levels";
+import { agent, outside, route, studio, type Studio } from "./levels";
 
 type Level = "outside" | "studio" | "agent";
 interface Route { level: Level; id?: CellId }
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const small = Math.min(innerWidth, innerHeight) < 700;
-const field = new Field($("field"), small ? 1700 : 2600);
+const field = new Field($("field"), small ? 2400 : 3600);
 
 let history: PublicEvent[] = [];
 let counts: Counts | null = null;
 let demo = false;
 let st: Studio = studio(field.width, field.height);
+const build = () => (st = studio(field.width, field.height, history));
 let current: Route = { level: "outside" };
 let busy = false;
 let queued: Route | null = null;
@@ -64,7 +65,7 @@ async function go(to: Route): Promise<void> {
     current = to;
   } finally {
     busy = false;
-    if (queued) { const q = queued; queued = null; go(q); }
+    if (queued) { const q = queued; queued = null; go(q); } else reform();
   }
 }
 
@@ -73,12 +74,13 @@ async function enterStudio(): Promise<void> {
   const out = outside(field.width, field.height);
   show(null);
   field.surge(160);
-  await field.camera({ x: out.door.x, y: out.door.y, s: out.doorZoom }, 1.7, "in");
+  await field.camera({ x: out.opening.x, y: out.opening.y, s: out.diveZoom }, 1.7, "in");
   field.setStream(null);
-  st = studio(field.width, field.height);
-  field.form(st.formation, { stagger: 0.7 });
-  field.settle(6);
-  field.cam = { x: 0, y: 0, s: 0.04 };
+  build();
+  field.form(st.formation, { stagger: 0.7, from: st.core });
+  field.settle(4);
+  // Out of the small kiln at the root of the tree.
+  field.cam = { x: st.core.x, y: st.core.y, s: st.coreZoom };
   current = { level: "studio" };
   placeAgents();
   refreshStates();
@@ -89,22 +91,21 @@ async function enterStudio(): Promise<void> {
 /** Back out of the door: the studio folds to a point, the kiln reappears around it. */
 async function exitStudio(): Promise<void> {
   show(null);
-  await field.camera({ x: 0, y: 0, s: 0.04 }, 1.4, "in");
+  await field.camera({ x: st.core.x, y: st.core.y, s: st.coreZoom }, 1.4, "in");
   const out = outside(field.width, field.height);
   field.form(out.formation, { stagger: 0.3 });
   field.settle(0);
-  field.cam = { x: out.door.x, y: out.door.y, s: out.doorZoom };
-  field.setStream(out.door, small ? 26 : 44);
+  field.cam = { x: out.opening.x, y: out.opening.y, s: out.diveZoom };
+  field.setStream(out.opening, small ? 26 : 44);
   await field.camera({ x: 0, y: 0, s: 1 }, 2, "expoOut");
   show("outside");
 }
 
 async function toAgent(id: CellId, fromAgent: boolean): Promise<void> {
   show(null);
-  const view = agent(field.width, field.height, st, id, eventsFor(id), Date.now());
+  const view = agent(field.width, field.height, st, id, eventsFor(id), history, Date.now());
   field.form(view.formation, { stagger: 0.45, from: st.agents[id] });
-  for (const c of CELLS) field.setGroup(c.id, { tAlpha: c.id === id ? 1 : 0.12, tScale: 1, spin: 0 });
-  field.setGroup("core", { tAlpha: 0.12 });
+  dim(id);
   fillPanel(id);
   current = { level: "agent", id };
   await field.camera(view.camera, fromAgent ? 1.1 : 1.4, "inOut");
@@ -114,15 +115,26 @@ async function toAgent(id: CellId, fromAgent: boolean): Promise<void> {
 async function leaveAgent(): Promise<void> {
   show(null);
   const id = current.id!;
-  st = studio(field.width, field.height);
+  build();
   field.form(st.formation, { stagger: 0.35, from: st.agents[id] });
-  for (const c of CELLS) field.setGroup(c.id, { tAlpha: 1 });
-  field.setGroup("core", { tAlpha: 1 });
+  dim(null);
   await field.camera({ x: 0, y: 0, s: 1 }, 1.3, "inOut");
   current = { level: "studio" };
   placeAgents();
   refreshStates();
   show("studio");
+}
+
+/** With an agent open, everything but it and its circuit home fades. */
+function dim(id: CellId | null): void {
+  for (const c of CELLS) {
+    const on = !id || c.id === id;
+    field.setGroup(c.id, { tAlpha: on ? 1 : 0.12, tScale: 1, spin: 0 });
+    field.setGroup(`trace-${c.id}`, { tAlpha: on ? 1 : 0.15 });
+    field.setGroup(`strip-${c.id}`, { tAlpha: !id ? 1 : on ? 0.5 : 0.08 });
+    field.setGroup(`halo-${c.id}`, { tAlpha: on ? 1 : 0.1 });
+  }
+  for (const g of ["root", "trunk", "bus"]) field.setGroup(g, { tAlpha: id ? 0.6 : 1 });
 }
 
 // ---------- the studio's labels ----------
@@ -132,7 +144,7 @@ for (const c of CELLS) {
   const b = document.createElement("button");
   b.className = "agent-btn";
   b.type = "button";
-  b.innerHTML = `<span class="hit"></span><span class="name"></span><span class="state"></span>`;
+  b.innerHTML = `<span class="name"></span><span class="state"></span>`;
   b.querySelector(".name")!.textContent = c.short;
   b.setAttribute("aria-label", `${c.name}: see its work`);
   b.addEventListener("click", () => navigate({ level: "agent", id: c.id }));
@@ -144,17 +156,18 @@ for (const c of CELLS) {
   buttons.set(c.id, b);
 }
 
+/** Each row is one button: from the agent's figure across its label to the end of its activity strip. */
 function placeAgents(): void {
   for (const c of CELLS) {
     const b = buttons.get(c.id)!;
-    const p = st.agents[c.id];
-    const hit = b.querySelector<HTMLElement>(".hit")!;
-    hit.style.width = hit.style.height = `${st.r * 2.6}px`;
-    b.style.transform = `translate(calc(${p.x + field.width / 2}px - 50%), ${p.y + field.height / 2 - st.r * 1.3}px)`;
+    const g = st.agents[c.id], l = st.labels[c.id];
+    const left = g.x - st.r - 8 + field.width / 2;
+    b.style.left = `${left}px`;
+    b.style.top = `${g.y - st.rowH / 2 + field.height / 2}px`;
+    b.style.height = `${st.rowH}px`;
+    b.style.width = `${st.stripX + (field.width < 640 ? 60 : 130) + field.width / 2 - left}px`;
+    b.style.paddingLeft = `${l.x + field.width / 2 - left}px`;
   }
-  const label = $("core-label");
-  label.style.left = `${field.width / 2}px`;
-  label.style.top = `${field.height / 2 + st.coreR + 6}px`;
 }
 
 const until = (at: number, now: number) => {
@@ -186,7 +199,6 @@ function refreshStates(): void {
     b.querySelector(".state")!.textContent = s.text;
     if (current.level === "studio" && !busy) field.setGroup(c.id, { spin: s.working && !field.reduced ? 0.35 : 0 });
   }
-  $("core-label").textContent = counts ? `${counts.ready} ready · ${counts.openPRs} in review · ${counts.approvals} waiting` : "";
   $("counts").textContent = counts ? `${counts.ready} ready · ${counts.openPRs} prs · ${counts.approvals} waiting` : "";
   if (current.level === "agent" && current.id) fillFacts(current.id);
 }
@@ -273,20 +285,36 @@ function onEvent(e: PublicEvent): void {
     field.surge(failed ? 10 : 40);
   } else if (current.level === "studio" && !busy) {
     const [a, b] = flow(e);
-    const at = (k: CellId | "core") => (k === "core" ? st.core : st.agents[k]);
-    field.packet(at(a), at(b), failed ? 1.2 : 2);
+    field.pulse(route(st, a, b), failed ? 1.1 : 1.7);
     if (id) {
       field.setGroup(id, { tScale: 1.35 });
       setTimeout(() => field.setGroup(id, { tScale: 1 }), 450);
       if (failed) field.scatter(id);
     }
   } else if (current.level === "agent" && current.id && id === current.id && !busy) {
-    const view = agent(field.width, field.height, st, current.id, eventsFor(current.id), Date.now());
+    const view = agent(field.width, field.height, st, current.id, eventsFor(current.id), history, Date.now());
     field.form(view.formation, { stagger: 0.2, from: st.agents[current.id] });
     fillPanel(current.id);
+    field.pulse(st.up[current.id], 1.4);
     if (failed) field.scatter(current.id);
   }
   refreshStates();
+}
+
+let historyStale = false;
+
+/** Redraws the current level with the latest history (strips, rings). Waits out any camera move. */
+function reform(): void {
+  if (!historyStale) return;
+  historyStale = false;
+  if (current.level === "studio") { build(); field.form(st.formation, { stagger: 0.3, from: st.core }); }
+  if (current.level === "agent" && current.id) {
+    build();
+    const view = agent(field.width, field.height, st, current.id, eventsFor(current.id), history, Date.now());
+    field.form(view.formation, { stagger: 0.3, from: st.agents[current.id] });
+    dim(current.id);
+    fillPanel(current.id);
+  }
 }
 
 async function loadHistory(): Promise<void> {
@@ -297,11 +325,8 @@ async function loadHistory(): Promise<void> {
   } catch {
     if (!history.length) { history = demoHistory(Date.now()); demo = true; }
   }
-  if (current.level === "agent" && current.id && !busy) {
-    const view = agent(field.width, field.height, st, current.id, eventsFor(current.id), Date.now());
-    field.form(view.formation, { stagger: 0.3, from: st.agents[current.id] });
-    fillPanel(current.id);
-  }
+  historyStale = true;
+  if (!busy) reform();
   refreshStates();
 }
 
@@ -353,10 +378,11 @@ addEventListener("resize", () => {
   clearTimeout(resizeTimer);
   resizeTimer = window.setTimeout(() => {
     if (busy) return;
-    st = studio(field.width, field.height);
-    if (current.level === "outside") { const o = outside(field.width, field.height); field.form(o.formation, { stagger: 0.2 }); field.setStream(o.door, small ? 26 : 44); }
-    if (current.level === "studio") { field.form(st.formation, { stagger: 0.2 }); placeAgents(); }
-    if (current.level === "agent" && current.id) { const v = agent(field.width, field.height, st, current.id, eventsFor(current.id), Date.now()); field.form(v.formation, { stagger: 0.2 }); field.cam = v.camera; }
+    build();
+    placeAgents();
+    if (current.level === "outside") { const o = outside(field.width, field.height); field.form(o.formation, { stagger: 0.2 }); field.setStream(o.opening, small ? 26 : 44); }
+    if (current.level === "studio") field.form(st.formation, { stagger: 0.2 });
+    if (current.level === "agent" && current.id) { const v = agent(field.width, field.height, st, current.id, eventsFor(current.id), history, Date.now()); field.form(v.formation, { stagger: 0.2 }); dim(current.id); field.cam = v.camera; }
   }, 150);
 });
 
@@ -366,14 +392,14 @@ async function start(): Promise<void> {
   busy = true;
   if (route.level === "outside") {
     const o = outside(field.width, field.height);
-    field.form(o.formation, { stagger: 1.2, from: o.door });
-    field.setStream(o.door, small ? 26 : 44);
+    field.form(o.formation, { stagger: 1.2, from: o.opening });
+    field.setStream(o.opening, small ? 26 : 44);
     field.cam = { x: 0, y: 0, s: 0.7 };
     show("outside");
     await field.camera({ x: 0, y: 0, s: 1 }, 2.4, "expoOut");
   } else {
-    st = studio(field.width, field.height);
-    field.form(st.formation, { stagger: 0.8 });
+    build();
+    field.form(st.formation, { stagger: 0.8, from: st.core });
     placeAgents();
     current = { level: "studio" };
     refreshStates();
@@ -382,6 +408,7 @@ async function start(): Promise<void> {
     show("studio");
   }
   busy = false;
+  reform();
   // Anything asked for during the intro (a click, a changed hash) runs now.
   const next = queued ?? (route.level === "agent" ? route : null);
   queued = null;

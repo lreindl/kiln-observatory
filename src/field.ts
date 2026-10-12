@@ -21,7 +21,7 @@ export interface Formation {
 
 interface GroupState { c: Pt; rot: number; scale: number; alpha: number; tScale: number; tAlpha: number; spin: number; jitter: number; scatter: number }
 interface Camera { x: number; y: number; s: number }
-interface Mover { pts: Pt[]; t: number; dur: number; from: Pt; to: Pt; lift: number; size: number; trail: number }
+interface Mover { pts: Pt[]; t: number; dur: number; from: Pt; to: Pt; lift: number; size: number; trail: number; path?: { pts: Pt[]; lens: number[]; total: number } }
 
 const ease = {
   inOut: (k: number) => (k < 0.5 ? 4 * k ** 3 : 1 - (-2 * k + 2) ** 3 / 2),
@@ -151,6 +151,24 @@ export class Field {
   /** A packet of dots carrying work from one point to another along an arc. */
   packet(from: Pt, to: Pt, size = 1.8): void {
     this.movers.push({ pts: [], t: 0, dur: this.reduced ? 0.3 : 1.4 + Math.random() * 0.3, from, to, lift: (Math.random() - 0.5) * 0.6, size, trail: 7 });
+  }
+
+  /** A pulse running along a circuit (a polyline), like current along a trace. */
+  pulse(path: Pt[], size = 1.6): void {
+    const lens = [0];
+    for (let i = 1; i < path.length; i++) lens.push(lens[i - 1] + Math.hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y));
+    const total = lens[lens.length - 1] || 1;
+    this.movers.push({ pts: [], t: 0, dur: this.reduced ? 0.3 : Math.min(2.6, 0.7 + total / 420), from: path[0], to: path[path.length - 1], lift: 0, size, trail: 9, path: { pts: path, lens, total } });
+  }
+
+  private along(m: Mover, t: number): Pt {
+    const p = m.path!;
+    const d = t * p.total;
+    let i = 1;
+    while (i < p.lens.length - 1 && p.lens[i] < d) i++;
+    const a = p.pts[i - 1], b = p.pts[i];
+    const k = (d - p.lens[i - 1]) / ((p.lens[i] - p.lens[i - 1]) || 1);
+    return { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k };
   }
 
   /** The many: a constant inflow of dots toward `to`, at `rate` per second; null stops it. */
@@ -294,8 +312,9 @@ export class Field {
       const mid = { x: (m.from.x + m.to.x) / 2 - (m.to.y - m.from.y) * m.lift * 0.5, y: (m.from.y + m.to.y) / 2 + (m.to.x - m.from.x) * m.lift * 0.5 };
       for (let k = 0; k < m.trail; k++) {
         const t = ease.inOut(Math.min(1, Math.max(0, m.t - k * 0.025)));
-        const x = (1 - t) ** 2 * m.from.x + 2 * (1 - t) * t * mid.x + t * t * m.to.x;
-        const y = (1 - t) ** 2 * m.from.y + 2 * (1 - t) * t * mid.y + t * t * m.to.y;
+        const q = m.path ? this.along(m, t) : null;
+        const x = q ? q.x : (1 - t) ** 2 * m.from.x + 2 * (1 - t) * t * mid.x + t * t * m.to.x;
+        const y = q ? q.y : (1 - t) ** 2 * m.from.y + 2 * (1 - t) * t * mid.y + t * t * m.to.y;
         const fade = m.trail > 1 ? 1 - k / m.trail : Math.min(1, m.t * 4) * (1 - Math.max(0, (m.t - 0.85) / 0.15));
         const r = Math.max(0.5, m.size * dotScale * 0.75 * (m.trail > 1 ? 1 - k * 0.08 : 1));
         ctx.fillStyle = `rgba(255,255,255,${Math.max(0, fade) * (m.trail > 1 ? 1 : 0.55)})`;
