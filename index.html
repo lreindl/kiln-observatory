@@ -15,7 +15,7 @@
   <header class="bar">
     <nav class="crumbs" aria-label="Where you are">
       <a href="#" class="brand">GAME KILN</a>
-      <a href="#studio" class="crumb" data-show="studio agent">/ studio</a>
+      <a href="#studio" id="crumb-studio" class="crumb" data-show="studio agent">/ agents</a>
       <span class="crumb" id="crumb-agent" data-show="agent"></span>
     </nav>
     <p class="live"><span id="status" data-state="connecting">connecting</span><span id="counts"></span></p>
@@ -31,7 +31,13 @@
 
     <section id="studio" class="level" aria-label="The studio">
       <div id="agents"></div>
-      <p class="hint">Select an agent to see its work.</p>
+      <div class="foot">
+        <nav class="views" aria-label="How to show the agents">
+          <a href="#studio" data-view="tree">Folder</a>
+          <a href="#constellation" data-view="sky">Constellation</a>
+        </nav>
+        <p class="hint">Select an agent to see its work.</p>
+      </div>
     </section>
 
     <section id="agent" class="level" aria-live="polite">
