@@ -5,7 +5,7 @@ routines (an analyst, ops, growth, a quality auditor, a PM, an implementer, a
 reviewer, release and an approval digest) build and run mobile games, handing
 work to each other through GitHub. The Observatory is a
 black field of white dots and hairline geometry, in three levels you zoom
-between: outside the kiln, inside the studio with its ten agents, and one
+between: outside the kiln, the agents as a folder tree wired by circuit traces, and one
 agent's record, drawn as rings of days with a dot for every event. Live events
 travel between the agents as packets of dots. `#studio` and `#agent-<id>`
 (for example `#agent-implementer`) link straight to a level.
