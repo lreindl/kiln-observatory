@@ -10,40 +10,25 @@
 </head>
 <body>
   <div id="stage" aria-hidden="true"></div>
-  <div id="labels" aria-hidden="true"></div>
 
-  <header class="hud top">
+  <header id="bar">
     <div class="brand">
       <span class="mark">GAME KILN</span>
       <span class="sub">Observatory</span>
     </div>
+    <dl class="counts" aria-label="Studio now">
+      <div><dt>Ready for agents</dt><dd id="c-ready">–</dd></div>
+      <div><dt>Agent PRs open</dt><dd id="c-prs">–</dd></div>
+      <div><dt>Waiting on owner</dt><dd id="c-approvals">–</dd></div>
+    </dl>
+    <a id="all" href="#" hidden>← All offices</a>
     <div class="pills">
       <span id="status" class="pill" data-state="connecting" role="status">Connecting</span>
       <span id="backend" class="pill dim">Starting</span>
     </div>
   </header>
 
-  <section class="hud panel stats" aria-label="Studio now">
-    <h2>Studio now</h2>
-    <dl>
-      <div><dt>Ready for agents</dt><dd id="c-ready">–</dd></div>
-      <div><dt>Agent PRs open</dt><dd id="c-prs">–</dd></div>
-      <div><dt>Waiting on owner</dt><dd id="c-approvals">–</dd></div>
-    </dl>
-    <div id="heat" class="heat" aria-label="Kiln heat">
-      <span>Kiln heat</span><span id="heat-pct">0%</span>
-      <i></i>
-    </div>
-  </section>
-
-  <section class="hud panel log" aria-label="Activity">
-    <h2>Activity</h2>
-    <ol id="feed" aria-live="polite"></ol>
-  </section>
-
-  <footer class="hud foot">
-    Scheduled Claude Code routines building and running games. Activity only: what the agents do, never what they write.
-  </footer>
+  <main id="grid" aria-label="The studio's offices"></main>
 
   <script type="module" src="/src/main.ts"></script>
 </body>

@@ -3,9 +3,14 @@
 A live view of **Game Kiln**, an agentic game studio. Scheduled Claude Code
 routines (an analyst, ops, growth, a quality auditor, a PM, an implementer, a
 reviewer, release and an approval digest) build and run mobile games, handing
-work to each other through GitHub. The Observatory shows them at work as a
-cyberpunk studio floor built around the Kiln, whose heat follows how busy the
-studio is.
+work to each other through GitHub. The Observatory gives each of them, and
+the owner, an office of their own, side by side in a responsive grid: a night
+penthouse, an archive library, a network operations centre, a rooftop
+billboard, a clean room, a war room, a pneumatic mail room, a workshop, a zen
+study and the Kiln itself. Each room has its own animation for working and for
+finishing a piece of work, driven by the studio's real activity and the
+routines' schedules. Select an office to preview it; `#<office>` (for example
+`#release`) opens one on its own.
 
 It shows **activity only**: what the agents do, never what they write. The
 studio's repos are private; titles, bodies, numbers, branch names and money
@@ -27,9 +32,11 @@ private repos ──webhooks──▶ Worker ──allowlist──▶ Studio (Du
 - **`worker/studio.ts`** holds the state and pushes changes over hibernating
   WebSockets. Its alarm rebuilds the game list (from the studio's
   `games.yaml`) and the counts from the GitHub API, so a missed webhook heals.
-- **`src/`** is the scene: three.js with the WebGPU renderer (WebGL 2
-  fallback), TSL post-processing (bloom and chromatic aberration), and an HTML
-  HUD. Without a reachable Worker it runs a labelled demo feed.
+- **`src/`** is the site: one three.js WebGPU renderer (WebGL 2 fallback)
+  behind a CSS grid, drawing each office's own scene into its cell with
+  scissor rendering. The offices live in `src/offices/`, one file each, on a
+  shared base class in `kit.ts`. Without a reachable Worker the site runs a
+  labelled demo feed.
 
 ## Develop
 
