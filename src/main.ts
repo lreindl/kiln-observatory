@@ -5,10 +5,11 @@ import { CELLS, cellFor, describe, flow, schedule, weight, type CellId } from ".
 import { demoHistory } from "./demo";
 import { connect, type Status } from "./feed";
 import { Field } from "./field";
-import { agent, outside, route, studio, type Studio } from "./levels";
+import { agent, constellation, outside, route, studio, type Studio } from "./levels";
 
 type Level = "outside" | "studio" | "agent";
-interface Route { level: Level; id?: CellId }
+type View = "tree" | "sky";
+interface Route { level: Level; id?: CellId; view?: View }
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const small = Math.min(innerWidth, innerHeight) < 700;
@@ -18,7 +19,9 @@ let history: PublicEvent[] = [];
 let counts: Counts | null = null;
 let demo = false;
 let st: Studio = studio(field.width, field.height);
-const build = () => (st = studio(field.width, field.height, history));
+/** The agents level shows as a folder tree (the default) or a constellation. */
+let view: View = "tree";
+const build = () => (st = (view === "sky" ? constellation : studio)(field.width, field.height, history));
 let current: Route = { level: "outside" };
 let busy = false;
 let queued: Route | null = null;
@@ -27,12 +30,14 @@ let queued: Route | null = null;
 
 function parse(): Route {
   const h = location.hash.slice(1);
-  if (h === "studio") return { level: "studio" };
+  if (h === "studio") return { level: "studio", view: "tree" };
+  if (h === "constellation") return { level: "studio", view: "sky" };
   const m = /^agent-(\w+)$/.exec(h);
   if (m && CELLS.some((c) => c.id === m[1])) return { level: "agent", id: m[1] as CellId };
   return { level: "outside" };
 }
-const hashFor = (r: Route) => (r.level === "outside" ? "" : r.level === "studio" ? "#studio" : `#agent-${r.id}`);
+const studioHash = (v: View) => (v === "sky" ? "#constellation" : "#studio");
+const hashFor = (r: Route) => (r.level === "outside" ? "" : r.level === "studio" ? studioHash(r.view ?? view) : `#agent-${r.id}`);
 function navigate(r: Route): void {
   const want = hashFor(r);
   if (want === location.hash || (want === "" && location.hash === "")) return;
@@ -55,9 +60,15 @@ function show(level: Level | null): void {
 async function go(to: Route): Promise<void> {
   if (busy) { queued = to; return; }
   const from = current;
-  if (from.level === to.level && from.id === to.id) return;
+  const switching = to.level === "studio" && to.view && to.view !== view;
+  if (from.level === to.level && from.id === to.id && !switching) return;
   busy = true;
   try {
+    if (to.view && to.view !== view) {
+      view = to.view;
+      syncViewControls();
+      if (from.level === "studio") await switchView();
+    }
     if (from.level === "outside" && to.level !== "outside") await enterStudio();
     if (from.level === "agent" && to.level !== "agent") await leaveAgent();
     if (to.level === "outside" && from.level !== "outside") await exitStudio();
@@ -101,14 +112,34 @@ async function exitStudio(): Promise<void> {
   show("outside");
 }
 
+/** Folder ⇄ constellation: the same dots fly from one arrangement to the other. */
+async function switchView(): Promise<void> {
+  show(null);
+  build();
+  field.form(st.formation, { stagger: 0.9, from: st.core });
+  dim(null);
+  placeAgents();
+  refreshStates();
+  await field.camera({ x: 0, y: 0, s: 1 }, 0.9, "inOut");
+  show("studio");
+}
+
+function syncViewControls(): void {
+  for (const a of document.querySelectorAll<HTMLAnchorElement>("[data-view]")) {
+    if (a.dataset.view === view) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+  }
+  $("agents").dataset.view = view;
+  $("crumb-studio").setAttribute("href", studioHash(view));
+}
+
 async function toAgent(id: CellId, fromAgent: boolean): Promise<void> {
   show(null);
-  const view = agent(field.width, field.height, st, id, eventsFor(id), history, Date.now());
-  field.form(view.formation, { stagger: 0.45, from: st.agents[id] });
+  const v = agent(field.width, field.height, st, id, eventsFor(id), Date.now());
+  field.form(v.formation, { stagger: 0.45, from: st.agents[id] });
   dim(id);
   fillPanel(id);
   current = { level: "agent", id };
-  await field.camera(view.camera, fromAgent ? 1.1 : 1.4, "inOut");
+  await field.camera(v.camera, fromAgent ? 1.1 : 1.4, "inOut");
   show("agent");
 }
 
@@ -135,6 +166,7 @@ function dim(id: CellId | null): void {
     field.setGroup(`halo-${c.id}`, { tAlpha: on ? 1 : 0.1 });
   }
   for (const g of ["root", "trunk", "bus"]) field.setGroup(g, { tAlpha: id ? 0.6 : 1 });
+  for (const g of Object.keys(st.formation.groups)) if (g.startsWith("edge-")) field.setGroup(g, { tAlpha: !id || g.split("-").includes(id) ? 1 : 0.1 });
 }
 
 // ---------- the studio's labels ----------
@@ -158,15 +190,28 @@ for (const c of CELLS) {
 
 /** Each row is one button: from the agent's figure across its label to the end of its activity strip. */
 function placeAgents(): void {
+  const W = field.width / 2, H = field.height / 2;
   for (const c of CELLS) {
     const b = buttons.get(c.id)!;
     const g = st.agents[c.id], l = st.labels[c.id];
-    const left = g.x - st.r - 8 + field.width / 2;
+    if (st.kind === "sky") {
+      // A caption under the star; the button covers the star and its caption.
+      b.style.left = `${g.x + W - 80}px`;
+      b.style.top = `${g.y + H - st.r * 1.4}px`;
+      b.style.width = "160px";
+      b.style.height = "auto";
+      b.style.paddingLeft = "0";
+      b.style.paddingTop = `${st.r * 3}px`;
+      continue;
+    }
+    // A row: from the agent's figure across its label to the end of its activity strip.
+    const left = g.x - st.r - 10 + W;
     b.style.left = `${left}px`;
-    b.style.top = `${g.y - st.rowH / 2 + field.height / 2}px`;
+    b.style.top = `${g.y - st.rowH / 2 + H}px`;
     b.style.height = `${st.rowH}px`;
-    b.style.width = `${st.stripX + (field.width < 640 ? 60 : 130) + field.width / 2 - left}px`;
-    b.style.paddingLeft = `${l.x + field.width / 2 - left}px`;
+    b.style.width = `${st.stripX + (field.width < 640 ? 76 : 190) + W - left}px`;
+    b.style.paddingLeft = `${l.x + W - left}px`;
+    b.style.paddingTop = "0";
   }
 }
 
@@ -292,7 +337,7 @@ function onEvent(e: PublicEvent): void {
       if (failed) field.scatter(id);
     }
   } else if (current.level === "agent" && current.id && id === current.id && !busy) {
-    const view = agent(field.width, field.height, st, current.id, eventsFor(current.id), history, Date.now());
+    const view = agent(field.width, field.height, st, current.id, eventsFor(current.id), Date.now());
     field.form(view.formation, { stagger: 0.2, from: st.agents[current.id] });
     fillPanel(current.id);
     field.pulse(st.up[current.id], 1.4);
@@ -310,7 +355,7 @@ function reform(): void {
   if (current.level === "studio") { build(); field.form(st.formation, { stagger: 0.3, from: st.core }); }
   if (current.level === "agent" && current.id) {
     build();
-    const view = agent(field.width, field.height, st, current.id, eventsFor(current.id), history, Date.now());
+    const view = agent(field.width, field.height, st, current.id, eventsFor(current.id), Date.now());
     field.form(view.formation, { stagger: 0.3, from: st.agents[current.id] });
     dim(current.id);
     fillPanel(current.id);
@@ -363,6 +408,7 @@ if (CREDIT.name) {
 }
 
 $("enter").addEventListener("click", () => navigate({ level: "studio" }));
+syncViewControls();
 $("field").addEventListener("click", () => { if (current.level === "outside" && !busy) navigate({ level: "studio" }); });
 $("field").style.cursor = "pointer";
 addEventListener("keydown", (e) => {
@@ -382,13 +428,14 @@ addEventListener("resize", () => {
     placeAgents();
     if (current.level === "outside") { const o = outside(field.width, field.height); field.form(o.formation, { stagger: 0.2 }); field.setStream(o.opening, small ? 26 : 44); }
     if (current.level === "studio") field.form(st.formation, { stagger: 0.2 });
-    if (current.level === "agent" && current.id) { const v = agent(field.width, field.height, st, current.id, eventsFor(current.id), history, Date.now()); field.form(v.formation, { stagger: 0.2 }); dim(current.id); field.cam = v.camera; }
+    if (current.level === "agent" && current.id) { const v = agent(field.width, field.height, st, current.id, eventsFor(current.id), Date.now()); field.form(v.formation, { stagger: 0.2 }); dim(current.id); field.cam = v.camera; }
   }, 150);
 });
 
 /** First paint: the field gathers out of dust and the camera settles. */
 async function start(): Promise<void> {
   const route = parse();
+  if (route.view) { view = route.view; syncViewControls(); }
   busy = true;
   if (route.level === "outside") {
     const o = outside(field.width, field.height);

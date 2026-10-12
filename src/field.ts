@@ -280,7 +280,7 @@ export class Field {
       else if (g.kind === "circle") { ctx.arc(sx(g.c.x), sy(g.c.y), g.r * cam.s, 0, Math.PI * 2); ctx.stroke(); }
       else if (g.kind === "ellipse") { ctx.ellipse(sx(g.c.x), sy(g.c.y), g.rx * cam.s, g.ry * cam.s, 0, 0, Math.PI * 2); ctx.stroke(); }
       else {
-        ctx.font = `400 ${g.size ?? 10}px "IBM Plex Mono", ui-monospace, monospace`;
+        ctx.font = `400 ${g.size ?? 12}px "IBM Plex Mono", ui-monospace, monospace`;
         ctx.textAlign = g.align ?? "left";
         ctx.fillText(g.text, sx(g.at.x), sy(g.at.y));
       }
@@ -299,7 +299,7 @@ export class Field {
       const p = this.pos(i)!;
       const X = sx(p.x), Y = sy(p.y);
       if (X < -10 || Y < -10 || X > w + 10 || Y > h + 10) continue;
-      const r = Math.max(0.45, this.size[i] * dotScale * 0.75);
+      const r = Math.max(0.55, this.size[i] * dotScale * 0.9);
       const b = Math.min(BINS - 1, Math.floor(a * BINS));
       paths[b].moveTo(X + r, Y);
       paths[b].arc(X, Y, r, 0, Math.PI * 2);

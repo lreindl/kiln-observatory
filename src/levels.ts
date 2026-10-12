@@ -2,7 +2,7 @@
 // World origin is the centre of the screen at camera scale 1.
 
 import type { PublicEvent } from "../shared/public";
-import { CELLS, cellFor, weight, type CellId } from "./crew";
+import { CELLS, cellFor, flow, weight, type CellId } from "./crew";
 import type { FPoint, Formation, Guide } from "./field";
 import { electricKiln, rng } from "./kiln";
 import { circle, glyph, line, resample, type Pt } from "./shapes";
@@ -16,7 +16,7 @@ export interface Outside { formation: Formation; opening: Pt; diveZoom: number }
 
 export function outside(w: number, h: number): Outside {
   const portrait = w < h;
-  const H = portrait ? Math.min(w * 0.42, h * 0.2) : Math.min(h * 0.24, w * 0.28);
+  const H = portrait ? Math.min(w * 0.48, h * 0.22) : Math.min(h * 0.27, w * 0.3);
   const ground = portrait ? h * 0.04 : h * 0.1;
   const k = electricKiln(0, ground, H, Math.max(2.4, H / 70));
   const points: FPoint[] = k.dots.map((d) => ({ ...d, group: "kiln" }));
@@ -44,6 +44,8 @@ export function outside(w: number, h: number): Outside {
 // ---------- the agents: a folder tree ----------
 
 export interface Studio {
+  /** The folder tree (the default, for scanning) or the constellation (for the flow of work). */
+  kind: "tree" | "sky";
   formation: Formation;
   /** Glyph radius. */
   r: number;
@@ -76,19 +78,19 @@ function perDay(events: PublicEvent[], id: CellId, days: number, now: number): n
 export function studio(w: number, h: number, events: PublicEvent[] = [], now = Date.now()): Studio {
   const narrow = w < 640;
   const days = narrow ? 7 : 14;
-  const colW = narrow ? 8 : 10;
+  const colW = narrow ? 10 : 13;
   // Centre the tree on its contents: trunk, pads, figures, labels, strips.
-  const content = (narrow ? 34 + 22 + 18 + 18 + 112 : 46 + 30 + 22 + 18 + 196) + days * colW;
+  const content = (narrow ? 40 + 26 + 24 + 22 + 128 : 56 + 38 + 30 + 22 + 250) + days * colW;
   const left = -Math.min(w - 36, content) / 2;
-  const top = -h / 2 + (narrow ? 84 : 96);
-  const bottom = h / 2 - (narrow ? 56 : 64);
-  const kh = narrow ? 30 : 40;
+  const top = -h / 2 + (narrow ? 88 : 108);
+  const bottom = h / 2 - (narrow ? 120 : 116); // room for the view switch and hint
+  const kh = narrow ? 38 : 54;
   const step = 2.2;
   const points: FPoint[] = [];
   const guides: Guide[] = [];
   const groups: Record<string, Pt> = {};
-  const trace = (pts: Pt[], group: string, alpha = 0.55) => { for (const p of resample(pts, step * 1.5)) points.push({ ...p, size: 0.85, alpha, group }); };
-  const via = (p: Pt, group: string) => { for (const q of circle(p.x, p.y, 3.2, 1.6)) points.push({ ...q, size: 0.7, alpha: 0.9, group }); points.push({ ...p, size: 1.1, alpha: 1, group }); };
+  const trace = (pts: Pt[], group: string, alpha = 0.6) => { for (const p of resample(pts, step * 1.5)) points.push({ ...p, size: 1.05, alpha, group }); };
+  const via = (p: Pt, group: string) => { for (const q of circle(p.x, p.y, 4.4, 1.9)) points.push({ ...q, size: 0.85, alpha: 0.9, group }); points.push({ ...p, size: 1.4, alpha: 1, group }); };
 
   // The root: a small kiln.
   const groundY = top + kh * 2.05;
@@ -97,29 +99,29 @@ export function studio(w: number, h: number, events: PublicEvent[] = [], now = D
   for (const d of k.dots) points.push({ ...d, size: d.size * 0.8, group: "root" });
   const core = { x: kx, y: groundY - kh * 0.9 };
   groups.root = core;
-  guides.push({ kind: "text", at: { x: k.bounds.right + 14, y: groundY - kh * 0.45 }, text: "game-kiln/", alpha: 0.85, size: narrow ? 11 : 12 });
+  guides.push({ kind: "text", at: { x: k.bounds.right + 14, y: groundY - kh * 0.45 }, text: "game-kiln/", alpha: 0.9, size: narrow ? 13 : 15 });
 
   // Trunk from the kiln down to agents/.
   const rows = CELLS.length;
-  const rowH = Math.min(narrow ? 52 : 58, (bottom - (groundY + 40)) / (rows + 0.6));
-  const folder = { x: left + (narrow ? 34 : 46), y: groundY + rowH * 0.9 };
-  const c = 7;
+  const rowH = Math.min(narrow ? 62 : 74, (bottom - (groundY + 40)) / (rows + 0.6));
+  const folder = { x: left + (narrow ? 40 : 56), y: groundY + rowH * 0.9 };
+  const c = 9;
   const trunk = [{ x: kx, y: groundY + 6 }, { x: kx, y: folder.y - c }, { x: kx + c, y: folder.y }, { x: folder.x - 4, y: folder.y }];
   trace(trunk, "trunk");
   groups.trunk = folder;
   via(folder, "trunk");
-  guides.push({ kind: "text", at: { x: folder.x + 12, y: folder.y + 4 }, text: "agents/", alpha: 0.85, size: narrow ? 11 : 12 });
+  guides.push({ kind: "text", at: { x: folder.x + 12, y: folder.y + 4 }, text: "agents/", alpha: 0.9, size: narrow ? 13 : 15 });
 
   // The bus, and a branch to each agent.
   const rows0 = folder.y;
-  const r = narrow ? 9 : 11;
+  const r = narrow ? 12 : 15;
   const busX = folder.x;
-  const padX = busX + (narrow ? 22 : 30);
+  const padX = busX + (narrow ? 26 : 38);
   const lastY = rows0 + rowH * rows;
   trace([{ x: busX, y: rows0 + 4 }, { x: busX, y: lastY - c }], "bus");
   groups.bus = folder;
-  const labelX = padX + r * 2 + 18;
-  const stripX = labelX + (narrow ? 112 : 196);
+  const labelX = padX + r * 2 + 22;
+  const stripX = labelX + (narrow ? 128 : 250);
   const agents = {} as Record<CellId, Pt>;
   const labels = {} as Record<CellId, Pt>;
   const up = {} as Record<CellId, Pt[]>;
@@ -129,37 +131,126 @@ export function studio(w: number, h: number, events: PublicEvent[] = [], now = D
     agents[cell.id] = g;
     labels[cell.id] = { x: labelX, y };
     groups[cell.id] = g;
-    trace([{ x: busX, y: y - c }, { x: busX + c, y }, { x: padX - 3.5, y }], `trace-${cell.id}`);
+    trace([{ x: busX, y: y - c }, { x: busX + c, y }, { x: padX - 4.6, y }], `trace-${cell.id}`);
     groups[`trace-${cell.id}`] = { x: busX, y };
     via({ x: padX, y }, `trace-${cell.id}`);
-    for (const q of glyph(cell.id, g.x, g.y, r, Math.max(1.4, r / 6))) points.push({ ...q, size: 0.95, alpha: 0.95, group: cell.id });
+    for (const q of glyph(cell.id, g.x, g.y, r, Math.max(1.6, r / 7))) points.push({ ...q, size: 1.15, alpha: 0.95, group: cell.id });
     up[cell.id] = [{ x: g.x - r - 2, y }, { x: padX, y }, { x: busX + c, y }, { x: busX, y: y - c }, { x: busX, y: rows0 }, ...trunk.slice().reverse(), core];
     // Activity: a halo of dust around the figure, denser the busier the agent, and a
     // dot matrix of the last days, densest where the work was.
     const daily = perDay(events, cell.id, days, now);
     const total = daily.reduce((a, b) => a + b, 0);
     const random = rng(i + 1);
-    for (let k2 = 0; k2 < Math.min(70, total * 3); k2++) {
+    for (let k2 = 0; k2 < Math.min(90, total * 4); k2++) {
       const a = random() * Math.PI * 2, rr = r * (1.25 + Math.sqrt(random()) * 0.75);
-      points.push({ x: g.x + Math.cos(a) * rr, y: g.y + Math.sin(a) * rr, size: 0.5, alpha: 0.3, group: `halo-${cell.id}` });
+      points.push({ x: g.x + Math.cos(a) * rr, y: g.y + Math.sin(a) * rr, size: 0.6, alpha: 0.32, group: `halo-${cell.id}` });
     }
     groups[`halo-${cell.id}`] = g;
     daily.forEach((n, d) => {
       for (let k2 = 0; k2 < 6; k2++) {
         const lit = k2 < n;
-        points.push({ x: stripX + d * colW, y: y + 9 - k2 * 3.8, size: lit ? 1.25 : 0.65, alpha: lit ? 0.95 : 0.2, group: `strip-${cell.id}` });
+        points.push({ x: stripX + d * colW, y: y + 12 - k2 * 4.8, size: lit ? 1.5 : 0.8, alpha: lit ? 0.95 : 0.2, group: `strip-${cell.id}` });
       }
     });
     groups[`strip-${cell.id}`] = { x: stripX, y };
     guides.push({ kind: "line", a: { x: labelX, y: y + rowH / 2 }, b: { x: stripX + days * colW, y: y + rowH / 2 }, alpha: 0.05 });
   });
-  guides.push({ kind: "text", at: { x: stripX, y: rows0 + 4 }, text: `last ${days} days`, alpha: 0.3, size: 10 });
+  guides.push({ kind: "text", at: { x: stripX, y: rows0 + 4 }, text: `last ${days} days`, alpha: 0.35, size: 12 });
   const coreZoom = Math.max(10, (Math.min(w, h) * 0.55) / kh);
-  return { formation: { points, guides, groups }, r, agents, labels, rowH, core, coreZoom, folder, up, stripX };
+  return { kind: "tree", formation: { points, guides, groups }, r, agents, labels, rowH, core, coreZoom, folder, up, stripX };
+}
+
+// ---------- the agents: a constellation ----------
+
+// Where each star sits, in a frame where work flows left to right: findings and
+// research on the left, the PM gathering them, the build in the middle, the
+// owner and release on the right. Portrait screens turn it to flow downward.
+const SKY: Record<CellId, [number, number]> = {
+  growth: [-0.52, -0.78], analyst: [-0.82, -0.36], ops: [-0.92, 0.18], quality: [-0.6, 0.66],
+  pm: [-0.3, 0.02], implementer: [0.04, 0.4], digest: [0.18, -0.62], reviewer: [0.38, 0.06],
+  owner: [0.66, -0.42], release: [0.88, 0.36],
+};
+const CORE: [number, number] = [0.5, 0.92];
+/** The routes work is meant to take, drawn faintly whether or not anything has moved on them yet. */
+const LANES: [CellId | "core", CellId | "core"][] = [
+  ["analyst", "pm"], ["ops", "pm"], ["quality", "pm"], ["growth", "pm"], ["growth", "digest"], ["pm", "implementer"],
+  ["implementer", "reviewer"], ["reviewer", "owner"], ["digest", "owner"], ["owner", "release"], ["release", "core"],
+];
+
+export function constellation(w: number, h: number, events: PublicEvent[] = [], now = Date.now()): Studio {
+  const portrait = w < h * 0.9;
+  const sx = portrait ? w * 0.36 : Math.min(w * 0.4, 640);
+  const sy = portrait ? h * 0.3 : h * 0.31;
+  const place = ([u, v]: [number, number]): Pt => (portrait ? { x: -v * sx, y: u * sy - h * 0.02 } : { x: u * sx, y: v * sy });
+  const r = portrait ? 12 : 15;
+  const points: FPoint[] = [];
+  const guides: Guide[] = [];
+  const groups: Record<string, Pt> = {};
+  const agents = {} as Record<CellId, Pt>;
+  const labels = {} as Record<CellId, Pt>;
+  const up = {} as Record<CellId, Pt[]>;
+  const core = place(CORE);
+  const kh = portrait ? 34 : 44;
+  const k = electricKiln(core.x, core.y + kh * 0.55, kh, 1.5, 0.45, 9);
+  for (const d of k.dots) points.push({ ...d, size: d.size * 0.85, group: "root" });
+  groups.root = core;
+  const at = (id: CellId | "core") => (id === "core" ? core : agents[id]);
+
+  // Traffic per route, from the history: how often work actually moved along it.
+  const traffic = new Map<string, number>();
+  const totals = new Map<CellId, number>();
+  for (const e of events) {
+    const [a, b] = flow(e);
+    if (a !== b) { const key = [a, b].sort().join(">"); traffic.set(key, (traffic.get(key) ?? 0) + 1); }
+    const id = cellFor(e);
+    if (id) totals.set(id, (totals.get(id) ?? 0) + 1);
+  }
+
+  CELLS.forEach((cell, i) => {
+    const p = place(SKY[cell.id]);
+    agents[cell.id] = p;
+    labels[cell.id] = { x: p.x, y: p.y + r * 1.6 };
+    groups[cell.id] = p;
+    for (const q of glyph(cell.id, p.x, p.y, r, Math.max(1.6, r / 7))) points.push({ ...q, size: 1.15, alpha: 1, group: cell.id });
+    // Brightness as density: a busier star gathers more dust.
+    const random = rng(40 + i);
+    for (let n = 0; n < Math.min(120, (totals.get(cell.id) ?? 0) * 5); n++) {
+      const a = random() * Math.PI * 2, rr = r * (1.3 + Math.pow(random(), 1.6) * 1.4);
+      points.push({ x: p.x + Math.cos(a) * rr, y: p.y + Math.sin(a) * rr, size: 0.6, alpha: 0.35, group: `halo-${cell.id}` });
+    }
+    groups[`halo-${cell.id}`] = p;
+    up[cell.id] = [p, core];
+  });
+
+  const lanes = new Set<string>();
+  for (const [a, b] of LANES) {
+    const A = at(a), B = at(b);
+    lanes.add([a, b].sort().join(">"));
+    guides.push({ kind: "line", a: A, b: B, alpha: 0.07, dash: [2, 6] });
+  }
+  // Each route that carried work is a line of dots, closer together the more it carried.
+  for (const [key, n] of traffic) {
+    const [a, b] = key.split(">") as (CellId | "core")[];
+    const A = at(a), B = at(b);
+    const len = Math.hypot(B.x - A.x, B.y - A.y);
+    const pad = r * 1.8;
+    if (len < pad * 2.2) continue;
+    const ux = (B.x - A.x) / len, uy = (B.y - A.y) / len;
+    const from = { x: A.x + ux * pad, y: A.y + uy * pad }, to = { x: B.x - ux * (b === "core" || a === "core" ? kh * 0.8 : pad), y: B.y - uy * (b === "core" || a === "core" ? kh * 0.8 : pad) };
+    const spacing = Math.max(3.2, 16 / Math.sqrt(n));
+    const group = `edge-${a}-${b}`;
+    for (const q of line(from, to, spacing)) points.push({ ...q, size: 0.9 + Math.min(0.9, n / 25), alpha: Math.min(0.95, 0.35 + n * 0.04), group });
+    groups[group] = { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 };
+    guides.push({ kind: "text", at: { x: (A.x + B.x) / 2 + uy * 12, y: (A.y + B.y) / 2 - ux * 12 + 4 }, text: String(n), alpha: 0.4, align: "center", size: 11 });
+  }
+  void lanes;
+  const coreZoom = Math.max(10, (Math.min(w, h) * 0.55) / kh);
+  return { kind: "sky", formation: { points, guides, groups }, r, agents, labels, rowH: 0, core, coreZoom, folder: core, up, stripX: 0 };
 }
 
 /** The circuit from one agent to another: up to agents/, then down. */
 export function route(st: Studio, from: CellId | "core", to: CellId | "core"): Pt[] {
+  if (st.kind === "sky") return [from === "core" ? st.core : st.agents[from], to === "core" ? st.core : st.agents[to]];
   const toFolder = (id: CellId) => st.up[id].slice(0, 5);
   if (from === "core" && to === "core") return [st.core, st.core];
   if (to === "core") return st.up[from as CellId];
@@ -182,18 +273,18 @@ const dayAngle = (t: number) => {
  * the studio began (oldest inside), each dot an event at its time of day. Its
  * circuit back to agents/ and the kiln stays lit.
  */
-export function agent(w: number, h: number, st: Studio, id: CellId, events: PublicEvent[], all: PublicEvent[], now: number): AgentView {
+export function agent(w: number, h: number, st: Studio, id: CellId, events: PublicEvent[], now: number): AgentView {
   const portrait = w < h * 0.9;
   const screen = portrait ? { x: w / 2, y: h * 0.3 } : { x: w * 0.32, y: h / 2 + 10 };
   const ringScreen = portrait ? Math.min(w * 0.38, h * 0.22) : Math.min(h * 0.34, w * 0.24);
   const s = Math.max(2.4, Math.min(9, (ringScreen * 0.3) / st.r));
   const c = st.agents[id];
   const camera = { x: c.x - (screen.x - w / 2) / s, y: c.y - (screen.y - h / 2) / s, s };
-  const base = studio(w, h, all, now).formation;
+  const base = st.formation;
   // This agent's own dots come first, so they always get a dot from the pool; the
   // other rows keep their figures and traces but not their strips and halos.
   const points: FPoint[] = [];
-  const rest = base.points.filter((p) => p.group !== id && !(p.group && /^(strip|halo)-/.test(p.group) && !p.group.endsWith(`-${id}`)));
+  const rest = base.points.filter((p) => p.group !== id && !(p.group && /^(strip|halo)-/.test(p.group) && !p.group.endsWith(`-${id}`)) && !(p.group?.startsWith("edge-") && !p.group.split("-").includes(id)));
 
   const R0 = st.r * 1.75, R1 = ringScreen / s;
   const days = Math.max(7, Math.ceil((now - HISTORY_START) / DAY));
