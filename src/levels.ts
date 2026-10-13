@@ -5,6 +5,7 @@ import type { PublicEvent } from "../shared/public";
 import { CELLS, cellFor, flow, weight, type CellId } from "./crew";
 import type { FPoint, Formation, Guide } from "./field";
 import { electricKiln, rng } from "./kiln";
+import { markDots } from "./mark";
 import { circle, glyph, line, resample, type Pt } from "./shapes";
 
 export const HISTORY_START = Date.UTC(2026, 9, 7);
@@ -94,14 +95,14 @@ export function studio(w: number, h: number, events: PublicEvent[] = [], now = D
   const trace = (pts: Pt[], group: string, alpha = 0.6) => { for (const p of resample(pts, step * 1.5)) points.push({ ...p, size: 1.05, alpha, group }); };
   const via = (p: Pt, group: string) => { for (const q of circle(p.x, p.y, 4.4, 1.9)) points.push({ ...q, size: 0.85, alpha: 0.9, group }); points.push({ ...p, size: 1.4, alpha: 1, group }); };
 
-  // The root: a small kiln.
+  // The root: the Game Kiln mark, the kiln seen from above.
   const groundY = top + kh * 2.05;
   const kx = left + kh * 0.62;
-  const k = electricKiln(kx, groundY, kh, 1.5, 0.45, 9);
-  for (const d of k.dots) points.push({ ...d, size: d.size * 0.8, group: "root" });
-  const core = { x: kx, y: groundY - kh * 0.9 };
+  const markSize = kh * 1.75;
+  const core = { x: kx, y: groundY - markSize * 0.42 };
+  for (const q of markDots(core.x, core.y, markSize, 1.7)) points.push({ ...q, size: 1.05, alpha: 1, group: "root" });
   groups.root = core;
-  guides.push({ kind: "text", at: { x: k.bounds.right + 14, y: groundY - kh * 0.45 }, text: "game-kiln/", alpha: 0.9, size: narrow ? 13 : 15 });
+  guides.push({ kind: "text", at: { x: kx + markSize * 0.56, y: core.y + 5 }, text: "game-kiln/", alpha: 0.9, size: narrow ? 13 : 15 });
 
   // Trunk from the kiln down to agents/.
   const rows = CELLS.length;
@@ -202,8 +203,7 @@ export function constellation(w: number, h: number, events: PublicEvent[] = [], 
   const up = {} as Record<CellId, Pt[]>;
   const core = place(portrait ? CORE_TALL : CORE);
   const kh = portrait ? 34 : 44;
-  const k = electricKiln(core.x, core.y + kh * 0.55, kh, 1.5, 0.45, 9);
-  for (const d of k.dots) points.push({ ...d, size: d.size * 0.85, group: "root" });
+  for (const q of markDots(core.x, core.y, kh * 1.5, 1.7)) points.push({ ...q, size: 1.05, alpha: 1, group: "root" });
   groups.root = core;
   const at = (id: CellId | "core") => (id === "core" ? core : agents[id]);
 
