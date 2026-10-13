@@ -3,6 +3,7 @@
 // version on the field, and the line version in the header (public/logo.svg
 // and public/favicon.svg are the same paths).
 
+import { rng } from "./kiln";
 import { resample, type Pt } from "./shapes";
 
 type Path = { points: [number, number][]; closed: boolean };
@@ -18,6 +19,32 @@ export const MARK: Path[] = [
 export function markDots(cx: number, cy: number, size: number, step: number): Pt[] {
   const k = size / 100;
   return MARK.flatMap((p) => resample(p.points.map(([x, y]) => ({ x: cx + (x - 50) * k, y: cy + (y - 50) * k })), step, p.closed));
+}
+
+/**
+ * The mark as a dense cluster of dots: each stroke is a band of dots, brightest
+ * along its line and thinning out to a little dust at its edges.
+ */
+export function markCluster(cx: number, cy: number, size: number, seed = 5): { x: number; y: number; size: number; alpha: number }[] {
+  const random = rng(seed);
+  const k = size / 100;
+  const band = 2.2 * k;
+  const out: { x: number; y: number; size: number; alpha: number }[] = [];
+  for (const p of MARK) {
+    const line = resample(p.points.map(([x, y]) => ({ x: cx + (x - 50) * k, y: cy + (y - 50) * k })), Math.max(1.6, k * 0.75), p.closed);
+    for (const q of line) {
+      out.push({ ...q, size: 1.15, alpha: 1 });
+      for (let n = 0; n < 2; n++) {
+        const a = random() * Math.PI * 2, r = Math.sqrt(random()) * band;
+        out.push({ x: q.x + Math.cos(a) * r, y: q.y + Math.sin(a) * r, size: 0.85, alpha: 0.8 });
+      }
+      if (random() < 0.35) {
+        const a = random() * Math.PI * 2, r = band * (1.2 + random() * 2.2);
+        out.push({ x: q.x + Math.cos(a) * r, y: q.y + Math.sin(a) * r, size: 0.6, alpha: 0.3 });
+      }
+    }
+  }
+  return out;
 }
 
 /** The mark as inline SVG, in the current text colour. */

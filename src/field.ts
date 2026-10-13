@@ -1,7 +1,7 @@
 // The dot field: one canvas, a pool of dots that spring toward the current
-// formation, a camera that zooms, hairline "construction" guides, and two kinds
-// of moving dots: streams (the many flowing in) and packets (work passing
-// between agents). Everything on screen is drawn here, in white on black.
+// formation, a camera that pans (for scrolling), hairline "construction"
+// guides, and pulses of work running along circuits between agents.
+// Everything on screen is drawn here, in white on black.
 
 import type { Pt } from "./shapes";
 
@@ -51,7 +51,6 @@ export class Field {
   cam: Camera = { x: 0, y: 0, s: 1 };
   private camTween: { from: Camera; to: Camera; t: number; dur: number; ease: Ease; done: () => void } | null = null;
   private movers: Mover[] = [];
-  private stream: { to: Pt; rate: number; acc: number } | null = null;
   private w = 0; private h = 0; private dpr = 1;
   /** Dot grid spacing in world units; 0 hides it. */
   grid = 28;
@@ -65,7 +64,7 @@ export class Field {
     this.size = f(); this.tsize = f(); this.alpha = f(); this.talpha = f(); this.delay = f();
     this.group = new Array(count).fill(null);
     for (let i = 0; i < count; i++) {
-      this.x[i] = (Math.random() - 0.5) * 2000; this.y[i] = (Math.random() - 0.5) * 1400;
+      this.x[i] = (Math.random() - 0.5) * innerWidth * 1.1; this.y[i] = (Math.random() - 0.5) * innerHeight * 1.1;
       this.tx[i] = this.x[i]; this.ty[i] = this.y[i]; this.size[i] = this.tsize[i] = 1;
     }
     addEventListener("resize", () => this.resize());
@@ -111,10 +110,10 @@ export class Field {
         this.group[i] = p.group ?? null;
         this.delay[i] = (Math.hypot(p.x - origin.x, p.y - origin.y) / far) * stagger + Math.random() * 0.08;
       } else {
-        // Dust: scattered wide and faint, so there are always many.
-        const a = Math.random() * Math.PI * 2, r = 200 + Math.random() * Math.max(this.w, this.h) * 1.2;
-        this.tx[i] = Math.cos(a) * r; this.ty[i] = Math.sin(a) * r;
-        this.tsize[i] = 0.7 + Math.random() * 0.5; this.talpha[i] = Math.random() < 0.6 ? 0.08 + Math.random() * 0.12 : 0;
+        // Dust: dots with no place in the formation settle where they are, faint,
+        // rather than streaking across the screen.
+        this.tx[i] = this.x[i] + (Math.random() - 0.5) * 24; this.ty[i] = this.y[i] + (Math.random() - 0.5) * 24;
+        this.tsize[i] = 0.7 + Math.random() * 0.4; this.talpha[i] = Math.random() < 0.12 ? 0.04 + Math.random() * 0.06 : 0;
         this.group[i] = null;
         this.delay[i] = Math.random() * stagger;
       }
@@ -122,14 +121,6 @@ export class Field {
     this.guides = f.guides;
     this.guideAlpha = 0;
     this.formedAt = this.time;
-  }
-
-  /** Places every dot at its target at once (for a cut hidden by the camera). */
-  settle(jitter = 0): void {
-    for (let i = 0; i < this.n; i++) {
-      this.x[i] = this.tx[i] + (Math.random() - 0.5) * jitter; this.y[i] = this.ty[i] + (Math.random() - 0.5) * jitter;
-      this.vx[i] = this.vy[i] = 0; this.size[i] = this.tsize[i]; this.alpha[i] = this.talpha[i]; this.delay[i] = 0;
-    }
   }
 
   setGroup(id: string, g: Partial<Pick<GroupState, "tScale" | "tAlpha" | "spin" | "jitter">>): void {
@@ -143,14 +134,17 @@ export class Field {
     if (s) s.scatter = 1;
   }
 
+  private timers: { at: number; done: () => void }[] = [];
+
+  /** Resolves after `seconds` of the field's own time (so a stepped clock moves it too). */
+  wait(seconds: number): Promise<void> {
+    if (this.reduced) seconds = Math.min(seconds, 0.25);
+    return new Promise((done) => this.timers.push({ at: this.time + seconds, done }));
+  }
+
   camera(to: Camera, dur: number, e: Ease = "inOut"): Promise<void> {
     if (this.reduced) dur = Math.min(dur, 0.25);
     return new Promise((done) => { this.camTween = { from: { ...this.cam }, to, t: 0, dur, ease: e, done }; });
-  }
-
-  /** A packet of dots carrying work from one point to another along an arc. */
-  packet(from: Pt, to: Pt, size = 1.8): void {
-    this.movers.push({ pts: [], t: 0, dur: this.reduced ? 0.3 : 1.4 + Math.random() * 0.3, from, to, lift: (Math.random() - 0.5) * 0.6, size, trail: 7 });
   }
 
   /** A pulse running along a circuit (a polyline), like current along a trace. */
@@ -171,15 +165,6 @@ export class Field {
     return { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k };
   }
 
-  /** The many: a constant inflow of dots toward `to`, at `rate` per second; null stops it. */
-  setStream(to: Pt | null, rate = 40): void {
-    this.stream = to ? { to, rate, acc: this.stream?.acc ?? 0 } : null;
-  }
-
-  surge(n = 80): void {
-    if (this.stream) this.stream.acc += n;
-  }
-
   /** World to screen. */
   toScreen(p: Pt): Pt {
     return { x: (p.x - this.cam.x) * this.cam.s + this.w / 2, y: (p.y - this.cam.y) * this.cam.s + this.h / 2 };
@@ -187,6 +172,7 @@ export class Field {
 
   step(dt: number): void {
     this.time += dt;
+    for (const t of [...this.timers]) if (this.time >= t.at) { this.timers.splice(this.timers.indexOf(t), 1); t.done(); }
     if (this.camTween) {
       const c = this.camTween;
       c.t = Math.min(1, c.t + dt / c.dur);
@@ -218,16 +204,6 @@ export class Field {
     for (const m of [...this.movers]) {
       m.t += dt / m.dur;
       if (m.t >= 1 + 0.15) this.movers.splice(this.movers.indexOf(m), 1);
-    }
-    if (this.stream) {
-      this.stream.acc += this.stream.rate * dt;
-      while (this.stream.acc >= 1) {
-        this.stream.acc -= 1;
-        const a = Math.random() * Math.PI * 2;
-        const r = Math.max(this.w, this.h) * (0.55 + Math.random() * 0.5) / this.cam.s;
-        const from = { x: this.stream.to.x + Math.cos(a) * r, y: this.stream.to.y + Math.sin(a) * r * 0.7 };
-        this.movers.push({ pts: [], t: 0, dur: 2.6 + Math.random() * 2.4, from, to: this.stream.to, lift: (Math.random() - 0.5) * 1.2, size: 0.9 + Math.random() * 0.5, trail: 1 });
-      }
     }
   }
 

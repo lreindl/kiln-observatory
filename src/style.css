@@ -24,12 +24,12 @@ button { font: inherit; color: inherit; }
 
 .bar {
   position: fixed; z-index: 3; top: 0; left: 0; right: 0;
-  display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
   padding: calc(env(safe-area-inset-top, 0px) + 22px) var(--gutter) 0;
   pointer-events: none;
 }
 .bar a, .bar span { pointer-events: auto; }
-.crumbs { display: flex; gap: 12px; align-items: baseline; letter-spacing: .14em; text-transform: uppercase; font-size: 14px; }
+.crumbs { display: flex; gap: 12px; align-items: center; letter-spacing: .14em; text-transform: uppercase; font-size: 14px; }
 .brand { font-weight: 500; text-decoration: none; display: inline-flex; align-items: center; gap: 10px; }
 .brand svg { flex: none; }
 .crumb { color: var(--dim); text-decoration: none; transition: opacity .5s; }

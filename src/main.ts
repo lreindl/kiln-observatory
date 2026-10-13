@@ -22,7 +22,16 @@ let demo = false;
 let st: Studio = studio(field.width, field.height);
 /** The agents level shows as a folder tree (the default) or a constellation. */
 let view: View = "tree";
-const build = () => (st = (view === "sky" ? constellation : studio)(field.width, field.height, history));
+/** The owner first, then whoever runs next: anyone in a run window now, then the soonest scheduled. Follows the schedule only, so rows move when runs start and end, not on every event. */
+let order: CellId[] = CELLS.map((c) => c.id);
+function agentOrder(now = Date.now()): CellId[] {
+  const rest = CELLS.filter((c) => c.id !== "owner").map((c) => ({ id: c.id, key: schedule(c, now).running ? -1 : schedule(c, now).next ?? Infinity }));
+  return ["owner", ...rest.sort((a, b) => a.key - b.key).map((x) => x.id)];
+}
+const build = () => {
+  order = agentOrder();
+  st = (view === "sky" ? constellation : studio)(field.width, field.height, history, Date.now(), order);
+};
 let current: Route = { level: "outside" };
 let busy = false;
 let queued: Route | null = null;
@@ -113,38 +122,27 @@ async function go(to: Route): Promise<void> {
   }
 }
 
-/** Into the kiln's door: the camera dives in, the studio opens out of a point. */
+/** Enter: the mark's dots fly apart and re-form as the agents. */
 async function enterStudio(): Promise<void> {
-  const out = outside(field.width, field.height);
   show(null);
-  field.surge(160);
-  await field.camera({ x: out.opening.x, y: out.opening.y, s: out.diveZoom }, 1.7, "in");
-  field.setStream(null);
   build();
-  field.form(st.formation, { stagger: 0.7, from: st.core });
-  field.settle(4);
-  // Out of the small kiln at the root of the tree.
-  field.cam = { x: st.core.x, y: st.core.y, s: st.coreZoom };
+  field.form(st.formation, { stagger: 1.1, from: outside(field.width, field.height).center });
   current = { level: "studio" };
   placeAgents();
   refreshStates();
   window.scrollTo(0, 0);
-  await field.camera({ x: 0, y: 0, s: 1 }, 2, "expoOut");
+  await field.wait(1.9);
   show("studio");
   updateScroll();
 }
 
-/** Back out of the door: the studio folds to a point, the kiln reappears around it. */
+/** Back outside: the agents gather back into the mark. */
 async function exitStudio(): Promise<void> {
   show(null);
   pinScroll();
-  await field.camera({ x: st.core.x, y: st.core.y, s: st.coreZoom }, 1.4, "in");
   const out = outside(field.width, field.height);
-  field.form(out.formation, { stagger: 0.3 });
-  field.settle(0);
-  field.cam = { x: out.opening.x, y: out.opening.y, s: out.diveZoom };
-  field.setStream(out.opening, small ? 26 : 44);
-  await field.camera({ x: 0, y: 0, s: 1 }, 2, "expoOut");
+  field.form(out.formation, { stagger: 1, from: st.core });
+  await Promise.all([field.camera({ x: 0, y: 0, s: 1 }, 0.8, "inOut"), field.wait(1.8)]);
   show("outside");
 }
 
@@ -175,22 +173,21 @@ async function toAgent(id: CellId, fromAgent: boolean): Promise<void> {
   show(null);
   if (!fromAgent) pinScroll();
   const v = agent(field.width, field.height, st, id, eventsFor(id), Date.now());
-  field.form(v.formation, { stagger: 0.45, from: st.agents[id] });
+  field.form(v.formation, { stagger: 0.7, from: fromAgent ? v.formation.groups[id] : st.agents[id] });
   dim(id);
   fillPanel(id);
   current = { level: "agent", id };
-  await field.camera(v.camera, fromAgent ? 1.1 : 1.4, "inOut");
+  await Promise.all([field.camera(v.camera, 0.9, "inOut"), field.wait(1.3)]);
   show("agent");
 }
 
 async function leaveAgent(): Promise<void> {
   show(null);
-  const id = current.id!;
   build();
-  field.form(st.formation, { stagger: 0.35, from: st.agents[id] });
+  field.form(st.formation, { stagger: 0.7, from: { x: 0, y: 0 } });
   dim(null);
   // Back to where the list was scrolled.
-  await field.camera({ x: 0, y: savedScroll, s: 1 }, 1.3, "inOut");
+  await Promise.all([field.camera({ x: 0, y: savedScroll, s: 1 }, 0.9, "inOut"), field.wait(1.3)]);
   current = { level: "studio" };
   placeAgents();
   refreshStates();
@@ -289,6 +286,12 @@ function refreshStates(): void {
     if (current.level === "studio" && !busy) field.setGroup(c.id, { spin: s.working && !field.reduced ? 0.35 : 0 });
   }
   $("counts").textContent = counts ? `${counts.ready} ready · ${counts.openPRs} prs · ${counts.approvals} waiting` : "";
+  const next = agentOrder(now);
+  if (next.join() !== order.join() && current.level === "studio" && view === "tree" && !busy) {
+    build();
+    field.form(st.formation, { stagger: 0.5 });
+    placeAgents();
+  }
   if (current.level === "agent" && current.id) fillFacts(current.id);
 }
 setInterval(refreshStates, 15_000);
@@ -315,8 +318,8 @@ function fillFacts(id: CellId): void {
 }
 
 function fillPanel(id: CellId): void {
-  const i = CELLS.findIndex((x) => x.id === id);
-  const c = CELLS[i];
+  const i = order.indexOf(id);
+  const c = CELLS.find((x) => x.id === id)!;
   $("a-index").textContent = `AGENT ${String(i + 1).padStart(2, "0")} / ${CELLS.length}`;
   $("a-name").textContent = c.name;
   $("a-role").textContent = c.role;
@@ -353,7 +356,8 @@ function fillPanel(id: CellId): void {
     li.append(what, when);
     list.appendChild(li);
   }
-  const prev = CELLS[(i + CELLS.length - 1) % CELLS.length], next = CELLS[(i + 1) % CELLS.length];
+  const at = (k: number) => CELLS.find((x) => x.id === order[(k + order.length) % order.length])!;
+  const prev = at(i - 1), next = at(i + 1);
   $("a-prev").setAttribute("href", `#agent-${prev.id}`);
   $("a-prev").querySelector("span")!.textContent = prev.short;
   $("a-next").setAttribute("href", `#agent-${next.id}`);
@@ -371,7 +375,9 @@ function onEvent(e: PublicEvent): void {
   if (id) recentlyActive.set(id, Date.now());
   const failed = e.ok === false || e.kind === "check.failed";
   if (current.level === "outside") {
-    field.surge(failed ? 10 : 40);
+    field.setGroup("logo", { tScale: 1.03 });
+    setTimeout(() => field.setGroup("logo", { tScale: 1 }), 500);
+    if (failed) field.scatter("logo");
   } else if (current.level === "studio" && !busy) {
     const [a, b] = flow(e);
     field.pulse(route(st, a, b), failed ? 1.1 : 1.7);
@@ -459,20 +465,21 @@ $("field").style.cursor = "pointer";
 addEventListener("keydown", (e) => {
   if (e.key === "Escape") navigate(current.level === "agent" ? { level: "studio" } : { level: "outside" });
   if (current.level === "agent" && (e.key === "ArrowRight" || e.key === "ArrowLeft")) {
-    const i = CELLS.findIndex((c) => c.id === current.id);
-    navigate({ level: "agent", id: CELLS[(i + (e.key === "ArrowRight" ? 1 : CELLS.length - 1)) % CELLS.length].id });
+    const i = order.indexOf(current.id!);
+    navigate({ level: "agent", id: order[(i + (e.key === "ArrowRight" ? 1 : order.length - 1)) % order.length] });
   }
 });
 
 let resizeTimer = 0;
 addEventListener("resize", () => {
   clearTimeout(resizeTimer);
-  resizeTimer = window.setTimeout(() => {
-    if (busy) return;
+  resizeTimer = window.setTimeout(function relayout() {
+    // Mid-move, try again shortly rather than dropping the resize.
+    if (busy) { resizeTimer = window.setTimeout(relayout, 300); return; }
     build();
     placeAgents();
     if (current.level === "studio") updateScroll();
-    if (current.level === "outside") { const o = outside(field.width, field.height); field.form(o.formation, { stagger: 0.2 }); field.setStream(o.opening, small ? 26 : 44); }
+    if (current.level === "outside") field.form(outside(field.width, field.height).formation, { stagger: 0.2 });
     if (current.level === "studio") field.form(st.formation, { stagger: 0.2 });
     if (current.level === "agent" && current.id) { const v = agent(field.width, field.height, st, current.id, eventsFor(current.id), Date.now()); field.form(v.formation, { stagger: 0.2 }); dim(current.id); field.cam = v.camera; }
   }, 150);
@@ -484,20 +491,18 @@ async function start(): Promise<void> {
   if (route.view) { view = route.view; syncViewControls(); }
   busy = true;
   if (route.level === "outside") {
+    // The dust gathers into the mark.
     const o = outside(field.width, field.height);
-    field.form(o.formation, { stagger: 1.2, from: o.opening });
-    field.setStream(o.opening, small ? 26 : 44);
-    field.cam = { x: 0, y: 0, s: 0.7 };
+    field.form(o.formation, { stagger: 1.4, from: o.center });
     show("outside");
-    await field.camera({ x: 0, y: 0, s: 1 }, 2.4, "expoOut");
+    await field.wait(1.6);
   } else {
     build();
     field.form(st.formation, { stagger: 0.8, from: st.core });
     placeAgents();
     current = { level: "studio" };
     refreshStates();
-    field.cam = { x: 0, y: 0, s: 0.6 };
-    await field.camera({ x: 0, y: 0, s: 1 }, 1.6, "expoOut");
+    await field.wait(1.4);
     show("studio");
   }
   busy = false;
