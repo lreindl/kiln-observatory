@@ -6,6 +6,7 @@ import { demoHistory } from "./demo";
 import { connect, type Status } from "./feed";
 import { Field } from "./field";
 import { agent, constellation, outside, route, studio, type Studio } from "./levels";
+import { markSvg } from "./mark";
 
 type Level = "outside" | "studio" | "agent";
 type View = "tree" | "sky";
@@ -450,6 +451,7 @@ if (CREDIT.name) {
   p.hidden = false;
 }
 
+$("brand").insertAdjacentHTML("afterbegin", markSvg(24, 6));
 $("enter").addEventListener("click", () => navigate({ level: "studio" }));
 syncViewControls();
 $("field").addEventListener("click", () => { if (current.level === "outside" && !busy) navigate({ level: "studio" }); });

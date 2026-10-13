@@ -30,7 +30,8 @@ button { font: inherit; color: inherit; }
 }
 .bar a, .bar span { pointer-events: auto; }
 .crumbs { display: flex; gap: 12px; align-items: baseline; letter-spacing: .14em; text-transform: uppercase; font-size: 14px; }
-.brand { font-weight: 500; text-decoration: none; }
+.brand { font-weight: 500; text-decoration: none; display: inline-flex; align-items: center; gap: 10px; }
+.brand svg { flex: none; }
 .crumb { color: var(--dim); text-decoration: none; transition: opacity .5s; }
 a.crumb:hover { color: var(--ink); }
 body[data-level="outside"] [data-show~="studio"], body:not([data-level="agent"]) [data-show="agent"] { opacity: 0; pointer-events: none; }
