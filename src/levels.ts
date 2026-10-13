@@ -4,8 +4,8 @@
 import type { PublicEvent } from "../shared/public";
 import { CELLS, cellFor, flow, weight, type CellId } from "./crew";
 import type { FPoint, Formation, Guide } from "./field";
-import { electricKiln, rng } from "./kiln";
-import { markDots } from "./mark";
+import { rng } from "./kiln";
+import { markCluster, markDots } from "./mark";
 import { circle, glyph, line, resample, type Pt } from "./shapes";
 
 export const HISTORY_START = Date.UTC(2026, 9, 7);
@@ -13,33 +13,21 @@ const DAY = 86_400_000;
 
 // ---------- outside ----------
 
-export interface Outside { formation: Formation; opening: Pt; diveZoom: number }
+export interface Outside { formation: Formation; center: Pt }
 
+/** The Game Kiln mark, large, as a dense cluster of dots. */
 export function outside(w: number, h: number): Outside {
   const portrait = w < h;
-  const H = portrait ? Math.min(w * 0.48, h * 0.22) : Math.min(h * 0.27, w * 0.3);
-  const ground = portrait ? h * 0.04 : h * 0.1;
-  const k = electricKiln(0, ground, H, Math.max(2.4, H / 70));
-  const points: FPoint[] = k.dots.map((d) => ({ ...d, group: "kiln" }));
-  const b = k.bounds;
-  const dimX = b.right + H * 0.16;
+  const size = portrait ? Math.min(w * 0.66, h * 0.34) : Math.min(h * 0.5, w * 0.34);
+  const center = { x: 0, y: portrait ? -h * 0.17 : -h * 0.08 };
+  const points: FPoint[] = markCluster(center.x, center.y, size).map((d) => ({ ...d, group: "logo" }));
   const guides: Guide[] = [
-    { kind: "line", a: { x: -w, y: k.floor }, b: { x: w, y: k.floor }, alpha: 0.22 },
-    { kind: "line", a: { x: 0, y: b.top - H * 0.1 }, b: { x: 0, y: ground + H * 0.12 }, alpha: 0.12, dash: [2, 6] },
-    // Height, from the floor to the rim.
-    { kind: "line", a: { x: dimX, y: ground - H }, b: { x: dimX, y: ground }, alpha: 0.25 },
-    { kind: "line", a: { x: dimX - 5, y: ground - H }, b: { x: dimX + 5, y: ground - H }, alpha: 0.25 },
-    { kind: "line", a: { x: dimX - 5, y: ground }, b: { x: dimX + 5, y: ground }, alpha: 0.25 },
-    { kind: "text", at: { x: dimX + 9, y: ground - H / 2 + 3 }, text: "H 1.2 m", alpha: 0.35 },
-    // Width, under the floor line.
-    { kind: "line", a: { x: b.left, y: k.floor + H * 0.1 }, b: { x: b.right, y: k.floor + H * 0.1 }, alpha: 0.2 },
-    { kind: "line", a: { x: b.left, y: k.floor + H * 0.1 - 5 }, b: { x: b.left, y: k.floor + H * 0.1 + 5 }, alpha: 0.2 },
-    { kind: "line", a: { x: b.right, y: k.floor + H * 0.1 - 5 }, b: { x: b.right, y: k.floor + H * 0.1 + 5 }, alpha: 0.2 },
-    { kind: "text", at: { x: (b.left + b.right) / 2, y: k.floor + H * 0.1 + 14 }, text: "W 0.9 m", alpha: 0.3, align: "center" },
-    { kind: "text", at: { x: portrait ? 0 : b.left - H * 0.12, y: portrait ? b.top - 12 : b.top + H * 0.2 }, text: "KILN 01 · ELECTRIC · 3 SECTIONS", alpha: 0.32, align: portrait ? "center" : "right" },
-    { kind: "circle", c: k.opening, r: H * 0.75, alpha: 0.07, dash: [1, 6] },
+    { kind: "circle", c: center, r: size * 0.62, alpha: 0.07, dash: [1, 6] },
+    { kind: "line", a: { x: center.x - size * 0.75, y: center.y }, b: { x: center.x - size * 0.66, y: center.y }, alpha: 0.2 },
+    { kind: "line", a: { x: center.x + size * 0.66, y: center.y }, b: { x: center.x + size * 0.75, y: center.y }, alpha: 0.2 },
+    { kind: "line", a: { x: center.x, y: center.y - size * 0.75 }, b: { x: center.x, y: center.y - size * 0.66 }, alpha: 0.2 },
   ];
-  return { formation: { points, guides, groups: { kiln: { x: 0, y: ground - H } } }, opening: k.opening, diveZoom: Math.max(14, Math.min(w, h) / (H * 0.2)) };
+  return { formation: { points, guides, groups: { logo: center } }, center };
 }
 
 // ---------- the agents: a folder tree ----------
@@ -55,9 +43,8 @@ export interface Studio {
   /** Where each agent's label starts, and the row height. */
   labels: Record<CellId, Pt>;
   rowH: number;
-  /** The kiln at the root of the tree, and the scale that makes it fill the screen. */
+  /** The mark at the root of the tree (or the end of the constellation). */
   core: Pt;
-  coreZoom: number;
   folder: Pt;
   /** Each agent's circuit back up to the kiln: glyph, pad, bus, folder, trunk, root. */
   up: Record<CellId, Pt[]>;
@@ -78,12 +65,12 @@ function perDay(events: PublicEvent[], id: CellId, days: number, now: number): n
   return out;
 }
 
-export function studio(w: number, h: number, events: PublicEvent[] = [], now = Date.now()): Studio {
+export function studio(w: number, h: number, events: PublicEvent[] = [], now = Date.now(), order: CellId[] = CELLS.map((c) => c.id)): Studio {
   const narrow = w < 640;
   const days = narrow ? 7 : 14;
   const colW = narrow ? 10 : 13;
   // Centre the tree on its contents: trunk, pads, figures, labels, strips.
-  const content = (narrow ? 40 + 26 + 24 + 22 + 128 : 56 + 38 + 30 + 22 + 250) + days * colW;
+  const content = (narrow ? 40 + 26 + 24 + 22 + 128 : 56 + 38 + 30 + 22 + 330) + days * colW;
   const left = -Math.min(w - 36, content) / 2;
   const top = -h / 2 + (narrow ? 88 : 108);
   const bottom = h / 2 - (narrow ? 120 : 116); // room for the view switch and hint
@@ -124,11 +111,11 @@ export function studio(w: number, h: number, events: PublicEvent[] = [], now = D
   trace([{ x: busX, y: rows0 + 4 }, { x: busX, y: lastY - c }], "bus");
   groups.bus = folder;
   const labelX = padX + r * 2 + 22;
-  const stripX = labelX + (narrow ? 128 : 250);
+  const stripX = labelX + (narrow ? 128 : 330); // clear of the name and "next in 19h 31m"
   const agents = {} as Record<CellId, Pt>;
   const labels = {} as Record<CellId, Pt>;
   const up = {} as Record<CellId, Pt[]>;
-  CELLS.forEach((cell, i) => {
+  order.map((id) => CELLS.find((c) => c.id === id)!).forEach((cell, i) => {
     const y = rows0 + rowH * (i + 1);
     const g = { x: padX + r + 10, y };
     agents[cell.id] = g;
@@ -159,8 +146,7 @@ export function studio(w: number, h: number, events: PublicEvent[] = [], now = D
     guides.push({ kind: "line", a: { x: labelX, y: y + rowH / 2 }, b: { x: stripX + days * colW, y: y + rowH / 2 }, alpha: 0.05 });
   });
   guides.push({ kind: "text", at: { x: stripX, y: rows0 + 4 }, text: `last ${days} days`, alpha: 0.35, size: 12 });
-  const coreZoom = Math.max(10, (Math.min(w, h) * 0.55) / kh);
-  return { kind: "tree", formation: { points, guides, groups }, r, agents, labels, rowH, core, coreZoom, folder, up, stripX, contentBottom: lastY + rowH / 2 };
+  return { kind: "tree", formation: { points, guides, groups }, r, agents, labels, rowH, core, folder, up, stripX, contentBottom: lastY + rowH / 2 };
 }
 
 // ---------- the agents: a constellation ----------
@@ -187,7 +173,7 @@ const LANES: [CellId | "core", CellId | "core"][] = [
   ["implementer", "reviewer"], ["reviewer", "owner"], ["digest", "owner"], ["owner", "release"], ["release", "core"],
 ];
 
-export function constellation(w: number, h: number, events: PublicEvent[] = [], now = Date.now()): Studio {
+export function constellation(w: number, h: number, events: PublicEvent[] = [], now = Date.now(), _order?: CellId[]): Studio {
   const portrait = w < h * 0.9;
   const sx = portrait ? Math.min(w * 0.36, 220) : Math.min(w * 0.4, 640);
   const sy = portrait ? 560 : h * 0.31;
@@ -256,9 +242,8 @@ export function constellation(w: number, h: number, events: PublicEvent[] = [], 
     if (!portrait) guides.push({ kind: "text", at: { x: (A.x + B.x) / 2 + uy * 12, y: (A.y + B.y) / 2 - ux * 12 + 4 }, text: String(n), alpha: 0.4, align: "center", size: 11 });
   }
   void lanes;
-  const coreZoom = Math.max(10, (Math.min(w, h) * 0.55) / kh);
   const contentBottom = Math.max(core.y + kh * 0.9, ...Object.values(labels).map((l) => l.y + 44));
-  return { kind: "sky", formation: { points, guides, groups }, r, agents, labels, rowH: 0, core, coreZoom, folder: core, up, stripX: 0, contentBottom };
+  return { kind: "sky", formation: { points, guides, groups }, r, agents, labels, rowH: 0, core, folder: core, up, stripX: 0, contentBottom };
 }
 
 /** The circuit from one agent to another: up to agents/, then down. */
@@ -283,32 +268,26 @@ const dayAngle = (t: number) => {
 
 /**
  * The agent's figure, large, wrapped in rings of days: each ring a day since
- * the studio began (oldest inside), each dot an event at its time of day. Its
- * circuit back to agents/ and the kiln stays lit.
+ * the studio began (oldest inside), each dot an event at its time of day.
+ * Drawn where it sits on screen; the dots re-form, the camera doesn't move.
  */
-export function agent(w: number, h: number, st: Studio, id: CellId, events: PublicEvent[], now: number): AgentView {
+export function agent(w: number, h: number, _st: Studio, id: CellId, events: PublicEvent[], now: number): AgentView {
   const portrait = w < h * 0.9;
-  const screen = portrait ? { x: w / 2, y: h * 0.3 } : { x: w * 0.32, y: h / 2 + 10 };
-  const ringScreen = portrait ? Math.min(w * 0.38, h * 0.22) : Math.min(h * 0.34, w * 0.24);
-  const s = Math.max(2.4, Math.min(9, (ringScreen * 0.3) / st.r));
-  const c = st.agents[id];
-  const camera = { x: c.x - (screen.x - w / 2) / s, y: c.y - (screen.y - h / 2) / s, s };
-  const base = st.formation;
-  // This agent's own dots come first, so they always get a dot from the pool; the
-  // other rows keep their figures and traces but not their strips and halos.
-  const points: FPoint[] = [];
-  const rest = base.points.filter((p) => p.group !== id && !(p.group && /^(strip|halo)-/.test(p.group) && !p.group.endsWith(`-${id}`)) && !(p.group?.startsWith("edge-") && !p.group.split("-").includes(id)));
-
-  const R0 = st.r * 1.75, R1 = ringScreen / s;
+  const c = portrait ? { x: 0, y: h * 0.3 - h / 2 } : { x: w * 0.32 - w / 2, y: 10 };
+  const R1 = portrait ? Math.min(w * 0.38, h * 0.22) : Math.min(h * 0.34, w * 0.24);
+  const G = R1 * 0.3;
+  const R0 = G * 1.75;
   const days = Math.max(7, Math.ceil((now - HISTORY_START) / DAY));
   const dr = (R1 - R0) / days;
+  const points: FPoint[] = [];
   const guides: Guide[] = [];
+  const hist = `${id}-hist`;
   for (let d = 0; d <= days; d++) guides.push({ kind: "circle", c, r: R0 + d * dr, alpha: d === days ? 0.22 : 0.06 });
   for (let hr = 0; hr < 24; hr++) {
     const a = -Math.PI / 2 + (hr / 24) * Math.PI * 2;
     const inner = R1 + (hr % 6 === 0 ? 0 : 0.6 * dr), outer = R1 + (hr % 6 === 0 ? 2.2 * dr : 1.2 * dr);
     guides.push({ kind: "line", a: { x: c.x + Math.cos(a) * inner, y: c.y + Math.sin(a) * inner }, b: { x: c.x + Math.cos(a) * outer, y: c.y + Math.sin(a) * outer }, alpha: hr % 6 === 0 ? 0.35 : 0.15 });
-    if (hr % 6 === 0) guides.push({ kind: "text", at: { x: c.x + Math.cos(a) * (outer + 1.6 * dr), y: c.y + Math.sin(a) * (outer + 1.6 * dr) + 3 }, text: String(hr).padStart(2, "0"), alpha: 0.4, align: "center", size: 9 });
+    if (hr % 6 === 0) guides.push({ kind: "text", at: { x: c.x + Math.cos(a) * (outer + 1.6 * dr + 6), y: c.y + Math.sin(a) * (outer + 1.6 * dr + 6) + 4 }, text: String(hr).padStart(2, "0"), alpha: 0.45, align: "center", size: 12 });
   }
   const na = dayAngle(now);
   guides.push({ kind: "line", a: { x: c.x + Math.cos(na) * R0, y: c.y + Math.sin(na) * R0 }, b: { x: c.x + Math.cos(na) * (R1 + 2.6 * dr), y: c.y + Math.sin(na) * (R1 + 2.6 * dr) }, alpha: 0.5 });
@@ -316,11 +295,10 @@ export function agent(w: number, h: number, st: Studio, id: CellId, events: Publ
   const today = Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), new Date(now).getUTCDate());
   for (const [hh, mm] of cell.times) {
     const a = dayAngle(today + (hh * 60 + mm) * 60_000);
-    for (const q of line({ x: c.x + Math.cos(a) * (R1 - dr * 0.5), y: c.y + Math.sin(a) * (R1 - dr * 0.5) }, { x: c.x + Math.cos(a) * (R1 + dr * 1.8), y: c.y + Math.sin(a) * (R1 + dr * 1.8) }, dr * 0.45)) points.push({ ...q, size: 0.8, alpha: 0.6, group: `${id}-hist` });
+    for (const q of line({ x: c.x + Math.cos(a) * (R1 - dr * 0.5), y: c.y + Math.sin(a) * (R1 - dr * 0.5) }, { x: c.x + Math.cos(a) * (R1 + dr * 1.8), y: c.y + Math.sin(a) * (R1 + dr * 1.8) }, Math.max(3, dr * 0.45))) points.push({ ...q, size: 0.9, alpha: 0.6, group: hist });
   }
   // Every event a dot, with a little dust around it, so busy hours read as dense.
-  let seed = 11;
-  const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const rnd = rng(11);
   for (const e of events) {
     const t = Date.parse(e.at);
     const d = Math.min(days - 1, Math.max(0, Math.floor((t - HISTORY_START) / DAY)));
@@ -328,14 +306,10 @@ export function agent(w: number, h: number, st: Studio, id: CellId, events: Publ
     const rr = R0 + (d + 0.5) * dr;
     const wt = weight(e);
     const p = { x: c.x + Math.cos(a) * rr, y: c.y + Math.sin(a) * rr };
-    points.push({ ...p, size: wt.size * Math.min(1, (dr * s) / 9) + 0.3, alpha: wt.alpha, group: `${id}-hist` });
-    for (let k = 0; k < 3; k++) points.push({ x: p.x + (rnd() - 0.5) * dr * 1.6, y: p.y + (rnd() - 0.5) * dr * 1.6, size: 0.45, alpha: 0.28, group: `${id}-hist` });
+    points.push({ ...p, size: wt.size * Math.min(1.6, dr / 8) + 0.4, alpha: wt.alpha, group: hist });
+    for (let k = 0; k < 3; k++) points.push({ x: p.x + (rnd() - 0.5) * dr * 1.6, y: p.y + (rnd() - 0.5) * dr * 1.6, size: 0.6, alpha: 0.3, group: hist });
   }
-  for (const q of circle(c.x, c.y, R1 + 2.6 * dr, Math.max(dr * 0.8, 2 / s))) points.push({ ...q, size: 0.6, alpha: 0.22, group: `${id}-hist` });
-  // A denser figure for this agent, and its circuit home, brighter.
-  for (const q of glyph(id, c.x, c.y, st.r, Math.max(0.5, st.r / 22))) points.push({ ...q, size: 0.75, alpha: 1, group: id });
-  for (const q of resample(st.up[id], 1.4)) points.push({ ...q, size: 0.6, alpha: 0.9, group: `${id}-home` });
-  points.push(...rest);
-  const groups = { ...base.groups, [`${id}-hist`]: c, [`${id}-home`]: c };
-  return { formation: { points, guides: [...base.guides.filter((g) => g.kind !== "text"), ...guides], groups }, camera };
+  for (const q of circle(c.x, c.y, R1 + 2.6 * dr, 4)) points.push({ ...q, size: 0.7, alpha: 0.25, group: hist });
+  for (const q of glyph(id, c.x, c.y, G, Math.max(1.6, G / 22))) points.push({ ...q, size: 1.3, alpha: 1, group: id });
+  return { formation: { points, guides, groups: { [id]: c, [hist]: c } }, camera: { x: 0, y: 0, s: 1 } };
 }
