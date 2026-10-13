@@ -61,6 +61,8 @@ export interface Studio {
   /** Each agent's circuit back up to the kiln: glyph, pad, bus, folder, trunk, root. */
   up: Record<CellId, Pt[]>;
   stripX: number;
+  /** The lowest point of the content, in world units; on a phone the page scrolls to reach it. */
+  contentBottom: number;
 }
 
 /** How many events an agent had on each of the last `days` days, oldest first. */
@@ -103,7 +105,7 @@ export function studio(w: number, h: number, events: PublicEvent[] = [], now = D
 
   // Trunk from the kiln down to agents/.
   const rows = CELLS.length;
-  const rowH = Math.min(narrow ? 62 : 74, (bottom - (groundY + 40)) / (rows + 0.6));
+  const rowH = narrow ? 60 : Math.min(74, (bottom - (groundY + 40)) / (rows + 0.6));
   const folder = { x: left + (narrow ? 40 : 56), y: groundY + rowH * 0.9 };
   const c = 9;
   const trunk = [{ x: kx, y: groundY + 6 }, { x: kx, y: folder.y - c }, { x: kx + c, y: folder.y }, { x: folder.x - 4, y: folder.y }];
@@ -141,7 +143,7 @@ export function studio(w: number, h: number, events: PublicEvent[] = [], now = D
     const daily = perDay(events, cell.id, days, now);
     const total = daily.reduce((a, b) => a + b, 0);
     const random = rng(i + 1);
-    for (let k2 = 0; k2 < Math.min(90, total * 4); k2++) {
+    for (let k2 = 0; k2 < Math.min(narrow ? 50 : 90, total * 4); k2++) {
       const a = random() * Math.PI * 2, rr = r * (1.25 + Math.sqrt(random()) * 0.75);
       points.push({ x: g.x + Math.cos(a) * rr, y: g.y + Math.sin(a) * rr, size: 0.6, alpha: 0.32, group: `halo-${cell.id}` });
     }
@@ -157,7 +159,7 @@ export function studio(w: number, h: number, events: PublicEvent[] = [], now = D
   });
   guides.push({ kind: "text", at: { x: stripX, y: rows0 + 4 }, text: `last ${days} days`, alpha: 0.35, size: 12 });
   const coreZoom = Math.max(10, (Math.min(w, h) * 0.55) / kh);
-  return { kind: "tree", formation: { points, guides, groups }, r, agents, labels, rowH, core, coreZoom, folder, up, stripX };
+  return { kind: "tree", formation: { points, guides, groups }, r, agents, labels, rowH, core, coreZoom, folder, up, stripX, contentBottom: lastY + rowH / 2 };
 }
 
 // ---------- the agents: a constellation ----------
@@ -171,6 +173,13 @@ const SKY: Record<CellId, [number, number]> = {
   owner: [0.66, -0.42], release: [0.88, 0.36],
 };
 const CORE: [number, number] = [0.5, 0.92];
+// Portrait: x across (-1..1), y down the page (0..1+).
+const SKY_TALL: Record<CellId, [number, number]> = {
+  ops: [-0.62, 0], analyst: [0.62, 0], quality: [-0.62, 0.15], growth: [0.62, 0.15],
+  pm: [-0.1, 0.32], digest: [0.66, 0.42], implementer: [-0.55, 0.5],
+  reviewer: [-0.05, 0.66], owner: [0.6, 0.8], release: [-0.5, 0.94],
+};
+const CORE_TALL: [number, number] = [0.25, 1.1];
 /** The routes work is meant to take, drawn faintly whether or not anything has moved on them yet. */
 const LANES: [CellId | "core", CellId | "core"][] = [
   ["analyst", "pm"], ["ops", "pm"], ["quality", "pm"], ["growth", "pm"], ["growth", "digest"], ["pm", "implementer"],
@@ -179,9 +188,11 @@ const LANES: [CellId | "core", CellId | "core"][] = [
 
 export function constellation(w: number, h: number, events: PublicEvent[] = [], now = Date.now()): Studio {
   const portrait = w < h * 0.9;
-  const sx = portrait ? w * 0.36 : Math.min(w * 0.4, 640);
-  const sy = portrait ? h * 0.3 : h * 0.31;
-  const place = ([u, v]: [number, number]): Pt => (portrait ? { x: -v * sx, y: u * sy - h * 0.02 } : { x: u * sx, y: v * sy });
+  const sx = portrait ? Math.min(w * 0.36, 220) : Math.min(w * 0.4, 640);
+  const sy = portrait ? 560 : h * 0.31;
+  const top = -h / 2 + 120;
+  const place = ([u, v]: [number, number]): Pt => (portrait ? { x: u * sx, y: top + v * sy } : { x: u * sx, y: v * sy });
+  const spot = (id: CellId): Pt => place(portrait ? SKY_TALL[id] : SKY[id]);
   const r = portrait ? 12 : 15;
   const points: FPoint[] = [];
   const guides: Guide[] = [];
@@ -189,7 +200,7 @@ export function constellation(w: number, h: number, events: PublicEvent[] = [], 
   const agents = {} as Record<CellId, Pt>;
   const labels = {} as Record<CellId, Pt>;
   const up = {} as Record<CellId, Pt[]>;
-  const core = place(CORE);
+  const core = place(portrait ? CORE_TALL : CORE);
   const kh = portrait ? 34 : 44;
   const k = electricKiln(core.x, core.y + kh * 0.55, kh, 1.5, 0.45, 9);
   for (const d of k.dots) points.push({ ...d, size: d.size * 0.85, group: "root" });
@@ -207,7 +218,7 @@ export function constellation(w: number, h: number, events: PublicEvent[] = [], 
   }
 
   CELLS.forEach((cell, i) => {
-    const p = place(SKY[cell.id]);
+    const p = spot(cell.id);
     agents[cell.id] = p;
     labels[cell.id] = { x: p.x, y: p.y + r * 1.6 };
     groups[cell.id] = p;
@@ -241,11 +252,13 @@ export function constellation(w: number, h: number, events: PublicEvent[] = [], 
     const group = `edge-${a}-${b}`;
     for (const q of line(from, to, spacing)) points.push({ ...q, size: 0.9 + Math.min(0.9, n / 25), alpha: Math.min(0.95, 0.35 + n * 0.04), group });
     groups[group] = { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 };
-    guides.push({ kind: "text", at: { x: (A.x + B.x) / 2 + uy * 12, y: (A.y + B.y) / 2 - ux * 12 + 4 }, text: String(n), alpha: 0.4, align: "center", size: 11 });
+    // On a phone the counts crowd the labels; the density of the line carries it.
+    if (!portrait) guides.push({ kind: "text", at: { x: (A.x + B.x) / 2 + uy * 12, y: (A.y + B.y) / 2 - ux * 12 + 4 }, text: String(n), alpha: 0.4, align: "center", size: 11 });
   }
   void lanes;
   const coreZoom = Math.max(10, (Math.min(w, h) * 0.55) / kh);
-  return { kind: "sky", formation: { points, guides, groups }, r, agents, labels, rowH: 0, core, coreZoom, folder: core, up, stripX: 0 };
+  const contentBottom = Math.max(core.y + kh * 0.9, ...Object.values(labels).map((l) => l.y + 44));
+  return { kind: "sky", formation: { points, guides, groups }, r, agents, labels, rowH: 0, core, coreZoom, folder: core, up, stripX: 0, contentBottom };
 }
 
 /** The circuit from one agent to another: up to agents/, then down. */

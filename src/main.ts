@@ -13,7 +13,7 @@ interface Route { level: Level; id?: CellId; view?: View }
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const small = Math.min(innerWidth, innerHeight) < 700;
-const field = new Field($("field"), small ? 2400 : 3600);
+const field = new Field($("field"), small ? 3400 : 4000);
 
 let history: PublicEvent[] = [];
 let counts: Counts | null = null;
@@ -25,6 +25,38 @@ const build = () => (st = (view === "sky" ? constellation : studio)(field.width,
 let current: Route = { level: "outside" };
 let busy = false;
 let queued: Route | null = null;
+
+// ---------- scrolling, on phones ----------
+// The agents level can be taller than a phone's screen. The document scrolls
+// over a spacer; the camera and the labels follow the scroll.
+
+const spacer = $("scroll-space");
+let savedScroll = 0;
+
+function updateScroll(): void {
+  const total = st.contentBottom + field.height / 2 + 120; // room for the view switch
+  const on = current.level === "studio" && field.width < 640 && total > field.height;
+  document.body.classList.toggle("scroll", on);
+  spacer.style.height = on ? `${total}px` : "0px";
+  followScroll(true);
+}
+
+/** The camera and labels track the page scroll; during a camera move only when asked. */
+function followScroll(force = false): void {
+  if (current.level !== "studio" || (busy && !force)) return;
+  const y = document.body.classList.contains("scroll") ? window.scrollY : 0;
+  field.cam = { x: 0, y, s: 1 };
+  $("agents").style.transform = `translateY(${-y}px)`;
+}
+addEventListener("scroll", () => followScroll(), { passive: true });
+
+/** Leaves the scrollable level: remembers where it was and pins the page. */
+function pinScroll(): void {
+  savedScroll = document.body.classList.contains("scroll") ? window.scrollY : 0;
+  document.body.classList.remove("scroll");
+  spacer.style.height = "0px";
+  $("agents").style.transform = "";
+}
 
 // ---------- routes ----------
 
@@ -95,13 +127,16 @@ async function enterStudio(): Promise<void> {
   current = { level: "studio" };
   placeAgents();
   refreshStates();
+  window.scrollTo(0, 0);
   await field.camera({ x: 0, y: 0, s: 1 }, 2, "expoOut");
   show("studio");
+  updateScroll();
 }
 
 /** Back out of the door: the studio folds to a point, the kiln reappears around it. */
 async function exitStudio(): Promise<void> {
   show(null);
+  pinScroll();
   await field.camera({ x: st.core.x, y: st.core.y, s: st.coreZoom }, 1.4, "in");
   const out = outside(field.width, field.height);
   field.form(out.formation, { stagger: 0.3 });
@@ -115,6 +150,8 @@ async function exitStudio(): Promise<void> {
 /** Folder ⇄ constellation: the same dots fly from one arrangement to the other. */
 async function switchView(): Promise<void> {
   show(null);
+  pinScroll();
+  window.scrollTo(0, 0);
   build();
   field.form(st.formation, { stagger: 0.9, from: st.core });
   dim(null);
@@ -122,6 +159,7 @@ async function switchView(): Promise<void> {
   refreshStates();
   await field.camera({ x: 0, y: 0, s: 1 }, 0.9, "inOut");
   show("studio");
+  updateScroll();
 }
 
 function syncViewControls(): void {
@@ -134,6 +172,7 @@ function syncViewControls(): void {
 
 async function toAgent(id: CellId, fromAgent: boolean): Promise<void> {
   show(null);
+  if (!fromAgent) pinScroll();
   const v = agent(field.width, field.height, st, id, eventsFor(id), Date.now());
   field.form(v.formation, { stagger: 0.45, from: st.agents[id] });
   dim(id);
@@ -149,11 +188,15 @@ async function leaveAgent(): Promise<void> {
   build();
   field.form(st.formation, { stagger: 0.35, from: st.agents[id] });
   dim(null);
-  await field.camera({ x: 0, y: 0, s: 1 }, 1.3, "inOut");
+  // Back to where the list was scrolled.
+  await field.camera({ x: 0, y: savedScroll, s: 1 }, 1.3, "inOut");
   current = { level: "studio" };
   placeAgents();
   refreshStates();
   show("studio");
+  updateScroll();
+  window.scrollTo(0, savedScroll);
+  followScroll(true);
 }
 
 /** With an agent open, everything but it and its circuit home fades. */
@@ -426,6 +469,7 @@ addEventListener("resize", () => {
     if (busy) return;
     build();
     placeAgents();
+    if (current.level === "studio") updateScroll();
     if (current.level === "outside") { const o = outside(field.width, field.height); field.form(o.formation, { stagger: 0.2 }); field.setStream(o.opening, small ? 26 : 44); }
     if (current.level === "studio") field.form(st.formation, { stagger: 0.2 });
     if (current.level === "agent" && current.id) { const v = agent(field.width, field.height, st, current.id, eventsFor(current.id), Date.now()); field.form(v.formation, { stagger: 0.2 }); dim(current.id); field.cam = v.camera; }
@@ -455,6 +499,7 @@ async function start(): Promise<void> {
     show("studio");
   }
   busy = false;
+  if (current.level === "studio") updateScroll();
   reform();
   // Anything asked for during the intro (a click, a changed hash) runs now.
   const next = queued ?? (route.level === "agent" ? route : null);
