@@ -1,6 +1,6 @@
 // The Worker: receives GitHub webhooks, maps them through the allowlist and
 // hands them to the Studio object; serves the live feed and the built site.
-// A cron checks the studio's services from outside for the uptime level.
+// The Studio checks the services from outside for the uptime level; a cron backs it up.
 
 import { toPublicEvent, itemKey } from "./allowlist";
 import { verifySignature } from "./signature";
@@ -51,7 +51,7 @@ export default {
     return env.ASSETS.fetch(request);
   },
 
-  /** The five-minute cron: check every service. */
+  /** The five-minute cron: a backstop for the Studio's own alarm, which runs the checks. */
   async scheduled(_event, env, ctx): Promise<void> {
     ctx.waitUntil(env.STUDIO.get(env.STUDIO.idFromName("studio")).checkServices());
   },
