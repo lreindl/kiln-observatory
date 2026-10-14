@@ -65,16 +65,57 @@ function perDay(events: PublicEvent[], id: CellId, days: number, now: number): n
   return out;
 }
 
-export function studio(w: number, h: number, events: PublicEvent[] = [], now = Date.now(), order: CellId[] = CELLS.map((c) => c.id)): Studio {
+/**
+ * Where a folder tree sits on screen: the mark, the folder and the rows. The
+ * agents and the services share it, so switching between them moves only what
+ * differs. Sized for the agents (the longer list), centred on their content.
+ */
+interface TreeFrame {
+  narrow: boolean;
+  kh: number;
+  groundY: number;
+  kx: number;
+  markSize: number;
+  core: Pt;
+  rowH: number;
+  folder: Pt;
+  r: number;
+  busX: number;
+  padX: number;
+  labelX: number;
+  stripX: number;
+  colW: number;
+  /** The right edge the strips may reach. */
+  right: number;
+}
+
+function treeFrame(w: number, h: number): TreeFrame {
   const narrow = w < 640;
   const days = narrow ? 7 : 14;
   const colW = narrow ? 10 : 13;
-  // Centre the tree on its contents: trunk, pads, figures, labels, strips.
+  // Centre the tree on the agents' contents: trunk, pads, figures, labels, strips.
   const content = (narrow ? 40 + 26 + 24 + 22 + 128 : 56 + 38 + 30 + 22 + 330) + days * colW;
   const left = -Math.min(w - 36, content) / 2;
   const top = -h / 2 + (narrow ? 88 : 108);
   const bottom = h / 2 - (narrow ? 120 : 116); // room for the view switch and hint
   const kh = narrow ? 38 : 54;
+  const groundY = top + kh * 2.05;
+  const kx = left + kh * 0.62;
+  const markSize = kh * 1.75;
+  const core = { x: kx, y: groundY - markSize * 0.42 };
+  const rowH = narrow ? 60 : Math.min(74, (bottom - (groundY + 40)) / (CELLS.length + 0.6));
+  const folder = { x: left + (narrow ? 40 : 56), y: groundY + rowH * 0.9 };
+  const r = narrow ? 12 : 15;
+  const busX = folder.x;
+  const padX = busX + (narrow ? 26 : 38);
+  const labelX = padX + r * 2 + 22;
+  const stripX = labelX + (narrow ? 128 : 330); // clear of the name and "next in 19h 31m"
+  return { narrow, kh, groundY, kx, markSize, core, rowH, folder, r, busX, padX, labelX, stripX, colW, right: w / 2 - 18 };
+}
+
+export function studio(w: number, h: number, events: PublicEvent[] = [], now = Date.now(), order: CellId[] = CELLS.map((c) => c.id)): Studio {
+  const { narrow, kh, groundY, kx, markSize, core, rowH, folder, r, busX, padX, labelX, stripX, colW } = treeFrame(w, h);
+  const days = narrow ? 7 : 14;
   const step = 2.2;
   const points: FPoint[] = [];
   /** Dots whose count depends on the data; drawn after the fixed ones. */
@@ -85,18 +126,12 @@ export function studio(w: number, h: number, events: PublicEvent[] = [], now = D
   const via = (p: Pt, group: string) => { for (const q of circle(p.x, p.y, 4.4, 1.9)) points.push({ ...q, size: 0.85, alpha: 0.9, group }); points.push({ ...p, size: 1.4, alpha: 1, group }); };
 
   // The root: the Game Kiln mark, the kiln seen from above.
-  const groundY = top + kh * 2.05;
-  const kx = left + kh * 0.62;
-  const markSize = kh * 1.75;
-  const core = { x: kx, y: groundY - markSize * 0.42 };
   for (const q of markDots(core.x, core.y, markSize, 1.7)) points.push({ ...q, size: 1.05, alpha: 1, group: "root" });
   groups.root = core;
   guides.push({ kind: "text", at: { x: kx + markSize * 0.56, y: core.y + 5 }, text: "game-kiln/", alpha: 0.9, size: narrow ? 13 : 15 });
 
   // Trunk from the kiln down to agents/.
   const rows = CELLS.length;
-  const rowH = narrow ? 60 : Math.min(74, (bottom - (groundY + 40)) / (rows + 0.6));
-  const folder = { x: left + (narrow ? 40 : 56), y: groundY + rowH * 0.9 };
   const c = 9;
   const trunk = [{ x: kx, y: groundY + 6 }, { x: kx, y: folder.y - c }, { x: kx + c, y: folder.y }, { x: folder.x - 4, y: folder.y }];
   trace(trunk, "trunk");
@@ -106,14 +141,9 @@ export function studio(w: number, h: number, events: PublicEvent[] = [], now = D
 
   // The bus, and a branch to each agent.
   const rows0 = folder.y;
-  const r = narrow ? 12 : 15;
-  const busX = folder.x;
-  const padX = busX + (narrow ? 26 : 38);
   const lastY = rows0 + rowH * rows;
   trace([{ x: busX, y: rows0 + 4 }, { x: busX, y: lastY - c }], "bus");
   groups.bus = folder;
-  const labelX = padX + r * 2 + 22;
-  const stripX = labelX + (narrow ? 128 : 330); // clear of the name and "next in 19h 31m"
   const agents = {} as Record<CellId, Pt>;
   const labels = {} as Record<CellId, Pt>;
   const up = {} as Record<CellId, Pt[]>;
@@ -291,14 +321,8 @@ export function uptimeDots(checks: number, up: number, degraded: number): number
  * full when the day had no downtime.
  */
 export function services(w: number, h: number, list: Service[], now = Date.now()): Services {
-  const narrow = w < 640;
-  const colW = narrow ? 10 : 13;
-  const fixed = narrow ? 40 + 26 + 24 + 22 + 128 : 56 + 38 + 30 + 22 + 330;
-  const days = Math.max(7, Math.min(30, Math.floor((w - 36 - fixed) / colW)));
-  const content = fixed + days * colW;
-  const left = -Math.min(w - 36, content) / 2;
-  const top = -h / 2 + (narrow ? 88 : 108);
-  const kh = narrow ? 38 : 54;
+  const { narrow, kh, groundY, kx, markSize, core, rowH, folder, r, busX, padX, labelX, stripX, colW, right } = treeFrame(w, h);
+  const days = Math.max(7, Math.min(30, Math.floor((right - stripX) / colW)));
   const step = 2.2;
   const points: FPoint[] = [];
   const guides: Guide[] = [];
@@ -306,30 +330,19 @@ export function services(w: number, h: number, list: Service[], now = Date.now()
   const trace = (pts: Pt[], group: string, alpha = 0.6) => { for (const p of resample(pts, step * 1.5)) points.push({ ...p, size: 1.05, alpha, group }); };
   const via = (p: Pt, group: string) => { for (const q of circle(p.x, p.y, 4.4, 1.9)) points.push({ ...q, size: 0.85, alpha: 0.9, group }); points.push({ ...p, size: 1.4, alpha: 1, group }); };
 
-  const groundY = top + kh * 2.05;
-  const kx = left + kh * 0.62;
-  const markSize = kh * 1.75;
-  const core = { x: kx, y: groundY - markSize * 0.42 };
   for (const q of markDots(core.x, core.y, markSize, 1.7)) points.push({ ...q, size: 1.05, alpha: 1, group: "root" });
   groups.root = core;
   guides.push({ kind: "text", at: { x: kx + markSize * 0.56, y: core.y + 5 }, text: "game-kiln/", alpha: 0.9, size: narrow ? 13 : 15 });
 
-  const rowH = narrow ? 60 : 74;
-  const folder = { x: left + (narrow ? 40 : 56), y: groundY + rowH * 0.9 };
   const c = 9;
   trace([{ x: kx, y: groundY + 6 }, { x: kx, y: folder.y - c }, { x: kx + c, y: folder.y }, { x: folder.x - 4, y: folder.y }], "trunk");
   groups.trunk = folder;
   via(folder, "trunk");
   guides.push({ kind: "text", at: { x: folder.x + 12, y: folder.y + 4 }, text: "services/", alpha: 0.9, size: narrow ? 13 : 15 });
 
-  const r = narrow ? 12 : 15;
-  const busX = folder.x;
-  const padX = busX + (narrow ? 26 : 38);
   const lastY = folder.y + rowH * list.length;
   if (list.length) trace([{ x: busX, y: folder.y + 4 }, { x: busX, y: lastY - c }], "bus");
   groups.bus = folder;
-  const labelX = padX + r * 2 + 22;
-  const stripX = labelX + (narrow ? 128 : 330);
   const rows: Record<string, Pt> = {};
   const labels: Record<string, Pt> = {};
   const today = Math.floor(now / DAY);
