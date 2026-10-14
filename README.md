@@ -10,6 +10,10 @@ agent's record, drawn as rings of days with a dot for every event. Live events
 travel between the agents as packets of dots. `#studio` and `#agent-<id>`
 (for example `#agent-implementer`) link straight to a level.
 
+A fourth level, `#services`, shows the services the studio runs (Pin High and
+D2 Factory) laid out like the agents, each with its uptime: a column of dots
+per day, full when the day had no downtime.
+
 It shows **activity only**: what the agents do, never what they write. The
 studio's repos are private; titles, bodies, numbers, branch names and money
 never leave the Worker. The decision and its allowlist are ADR-0025 in the
@@ -30,6 +34,11 @@ private repos ──webhooks──▶ Worker ──allowlist──▶ Studio (Du
 - **`worker/studio.ts`** keeps every public event in the Durable Object's
   SQLite and pushes changes over hibernating WebSockets. Its alarm rebuilds the
   game list and the counts from the GitHub API, so a missed webhook heals.
+- **`worker/services.ts`** lists the services and checks them from outside
+  every five minutes (the cron in `wrangler.jsonc`): a service is up when
+  every URL it needs answers with a success, down when none do, degraded in
+  between. Only the outcome is stored and shown; the URLs stay in the Worker.
+  `/api/services` serves the last 90 days.
 - **`worker/backfill.ts`** rebuilds history once, back to `HISTORY_SINCE`: each
   issue, pull request, review, label and release run becomes the webhook
   payload GitHub would have sent and goes through the same allowlist.
@@ -47,6 +56,10 @@ npm run dev        # the scene alone, with the demo feed
 npm run worker     # build, then serve site + Worker on :8787 (needs .dev.vars)
 npm run check      # types, tests, build (what CI runs)
 ```
+
+To run a round of service checks locally, start the Worker with
+`npx wrangler dev --test-scheduled` and open
+`http://localhost:8787/cdn-cgi/handler/scheduled`.
 
 For `npm run worker`, create `.dev.vars` (gitignored) with a local secret,
 plus `GITHUB_TOKEN=...` if you want real counts:

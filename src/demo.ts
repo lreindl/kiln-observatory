@@ -1,7 +1,7 @@
 // Plausible history for when no studio is reachable (local dev). The page
 // labels it "demo data"; it is never mixed with real history.
 
-import type { Kind, PublicEvent } from "../shared/public";
+import type { Kind, PublicEvent, Service } from "../shared/public";
 import { CELLS, type CellId } from "./crew";
 import { HISTORY_START } from "./levels";
 
@@ -37,4 +37,21 @@ export function demoHistory(now: number): PublicEvent[] {
     }
   }
   return out.sort((a, b) => b.at.localeCompare(a.at));
+}
+
+/** Plausible uptime: mostly clean days, a couple with an outage. */
+export function demoServices(now: number): Service[] {
+  const day = (ago: number) => new Date(now - ago * 86_400_000).toISOString().slice(0, 10);
+  const make = (id: string, name: string, bad: Record<number, [number, number]>, since: number): Service => ({
+    id, name, state: "up", checkedAt: new Date(now - 90_000).toISOString(),
+    days: Array.from({ length: since }, (_, i) => since - 1 - i).map((ago) => {
+      const checks = ago === 0 ? Math.floor(((now % 86_400_000) / 86_400_000) * 288) || 1 : 288;
+      const [down, degraded] = bad[ago] ?? [0, 0];
+      return { day: day(ago), checks, up: checks - down - degraded, degraded };
+    }),
+  });
+  return [
+    make("pinhigh", "Pin High", { 4: [6, 0], 11: [0, 9] }, 30),
+    make("d2factory", "D2 Factory", { 1: [40, 0] }, 2),
+  ];
 }

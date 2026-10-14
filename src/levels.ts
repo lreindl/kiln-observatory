@@ -1,7 +1,7 @@
 // The three levels as formations of dots, laid out for the current viewport.
 // World origin is the centre of the screen at camera scale 1.
 
-import type { PublicEvent } from "../shared/public";
+import type { PublicEvent, Service } from "../shared/public";
 import { CELLS, cellFor, flow, weight, type CellId } from "./crew";
 import type { FPoint, Formation, Guide } from "./field";
 import { rng } from "./kiln";
@@ -260,6 +260,106 @@ export function route(st: Studio, from: CellId | "core", to: CellId | "core"): P
   if (to === "core") return st.up[from as CellId];
   if (from === "core") return st.up[to].slice().reverse();
   return [...toFolder(from), ...toFolder(to).slice().reverse()];
+}
+
+// ---------- services: uptime ----------
+
+export interface Services {
+  formation: Formation;
+  r: number;
+  /** Glyph centres, label starts and row height, as on the agents level. */
+  rows: Record<string, Pt>;
+  labels: Record<string, Pt>;
+  rowH: number;
+  core: Pt;
+  stripX: number;
+  /** How many days the strips show. */
+  days: number;
+  colW: number;
+}
+
+/** Lit dots in a day's column, out of six: all six only for a day without downtime. */
+export function uptimeDots(checks: number, up: number, degraded: number): number {
+  if (!checks) return 0;
+  if (up === checks) return 6;
+  return Math.min(5, Math.round(((up + degraded * 0.5) / checks) * 6));
+}
+
+/**
+ * The services the studio runs, as a folder tree like the agents: the mark,
+ * services/, a row per service with its figure, and a column of dots per day,
+ * full when the day had no downtime.
+ */
+export function services(w: number, h: number, list: Service[], now = Date.now()): Services {
+  const narrow = w < 640;
+  const colW = narrow ? 10 : 13;
+  const fixed = narrow ? 40 + 26 + 24 + 22 + 128 : 56 + 38 + 30 + 22 + 330;
+  const days = Math.max(7, Math.min(30, Math.floor((w - 36 - fixed) / colW)));
+  const content = fixed + days * colW;
+  const left = -Math.min(w - 36, content) / 2;
+  const top = -h / 2 + (narrow ? 88 : 108);
+  const kh = narrow ? 38 : 54;
+  const step = 2.2;
+  const points: FPoint[] = [];
+  const guides: Guide[] = [];
+  const groups: Record<string, Pt> = {};
+  const trace = (pts: Pt[], group: string, alpha = 0.6) => { for (const p of resample(pts, step * 1.5)) points.push({ ...p, size: 1.05, alpha, group }); };
+  const via = (p: Pt, group: string) => { for (const q of circle(p.x, p.y, 4.4, 1.9)) points.push({ ...q, size: 0.85, alpha: 0.9, group }); points.push({ ...p, size: 1.4, alpha: 1, group }); };
+
+  const groundY = top + kh * 2.05;
+  const kx = left + kh * 0.62;
+  const markSize = kh * 1.75;
+  const core = { x: kx, y: groundY - markSize * 0.42 };
+  for (const q of markDots(core.x, core.y, markSize, 1.7)) points.push({ ...q, size: 1.05, alpha: 1, group: "root" });
+  groups.root = core;
+  guides.push({ kind: "text", at: { x: kx + markSize * 0.56, y: core.y + 5 }, text: "game-kiln/", alpha: 0.9, size: narrow ? 13 : 15 });
+
+  const rowH = narrow ? 60 : 74;
+  const folder = { x: left + (narrow ? 40 : 56), y: groundY + rowH * 0.9 };
+  const c = 9;
+  trace([{ x: kx, y: groundY + 6 }, { x: kx, y: folder.y - c }, { x: kx + c, y: folder.y }, { x: folder.x - 4, y: folder.y }], "trunk");
+  groups.trunk = folder;
+  via(folder, "trunk");
+  guides.push({ kind: "text", at: { x: folder.x + 12, y: folder.y + 4 }, text: "services/", alpha: 0.9, size: narrow ? 13 : 15 });
+
+  const r = narrow ? 12 : 15;
+  const busX = folder.x;
+  const padX = busX + (narrow ? 26 : 38);
+  const lastY = folder.y + rowH * list.length;
+  if (list.length) trace([{ x: busX, y: folder.y + 4 }, { x: busX, y: lastY - c }], "bus");
+  groups.bus = folder;
+  const labelX = padX + r * 2 + 22;
+  const stripX = labelX + (narrow ? 128 : 330);
+  const rows: Record<string, Pt> = {};
+  const labels: Record<string, Pt> = {};
+  const today = Math.floor(now / DAY);
+  list.forEach((svc, i) => {
+    const y = folder.y + rowH * (i + 1);
+    const g = { x: padX + r + 10, y };
+    rows[svc.id] = g;
+    labels[svc.id] = { x: labelX, y };
+    groups[svc.id] = g;
+    trace([{ x: busX, y: y - c }, { x: busX + c, y }, { x: padX - 4.6, y }], `trace-${svc.id}`, svc.state === "down" ? 0.25 : 0.6);
+    groups[`trace-${svc.id}`] = { x: busX, y };
+    via({ x: padX, y }, `trace-${svc.id}`);
+    for (const q of glyph(svc.id, g.x, g.y, r, Math.max(1.6, r / 7))) points.push({ ...q, size: 1.15, alpha: svc.state === "down" ? 0.45 : 0.95, group: svc.id });
+    const byDay = new Map(svc.days.map((d) => [d.day, d]));
+    for (let d = 0; d < days; d++) {
+      const key = new Date((today - (days - 1 - d)) * DAY).toISOString().slice(0, 10);
+      const day = byDay.get(key);
+      const lit = day ? uptimeDots(day.checks, day.up, day.degraded) : 0;
+      for (let k = 0; k < 6; k++) {
+        const on = k < lit;
+        // A day without checks is a faint baseline only, so "no data" never reads as "down".
+        if (!day && k > 0) continue;
+        points.push({ x: stripX + d * colW, y: y + 12 - k * 4.8, size: on ? 1.5 : 0.8, alpha: on ? 0.95 : day ? 0.2 : 0.12, group: `strip-${svc.id}` });
+      }
+    }
+    groups[`strip-${svc.id}`] = { x: stripX, y };
+    guides.push({ kind: "line", a: { x: labelX, y: y + rowH / 2 }, b: { x: stripX + days * colW, y: y + rowH / 2 }, alpha: 0.05 });
+  });
+  guides.push({ kind: "text", at: { x: stripX, y: folder.y + 4 }, text: `last ${days} days`, alpha: 0.35, size: 12 });
+  return { formation: { points, guides, groups }, r, rows, labels, rowH, core, stripX, days, colW };
 }
 
 // ---------- one agent ----------

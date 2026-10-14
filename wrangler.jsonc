@@ -3,6 +3,10 @@
   "name": "kiln-observatory",
   "main": "worker/index.ts",
   "compatibility_date": "2026-09-25",
+  // Uptime checks reach the games as a player would, over the public internet,
+  // including the game Workers on this account (otherwise error 1042).
+  "compatibility_flags": ["global_fetch_strictly_public"],
+  "triggers": { "crons": ["*/5 * * * *"] },
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",

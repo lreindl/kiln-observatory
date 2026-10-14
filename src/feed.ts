@@ -1,7 +1,7 @@
 // The live connection. If the studio can't be reached and nothing has arrived
 // yet, a clearly labelled demo feed keeps the scene alive while it retries.
 
-import { AGENTS, isCounts, isPublicEvent, type Agent, type Counts, type PublicEvent, type ServerMessage, type Snapshot } from "../shared/public";
+import { AGENTS, isCounts, isPublicEvent, isServices, type Agent, type Counts, type PublicEvent, type ServerMessage, type Service, type Snapshot } from "../shared/public";
 
 export type Status = "connecting" | "live" | "offline" | "demo";
 
@@ -12,6 +12,8 @@ export interface FeedHandlers {
   counts(c: Counts): void;
   /** The studio rebuilt its history; fetch it again. */
   history?(): void;
+  /** A round of service checks finished. */
+  services?(s: Service[]): void;
 }
 
 export function connect(h: FeedHandlers): void {
@@ -36,6 +38,7 @@ export function connect(h: FeedHandlers): void {
       if (msg.type === "event" && isPublicEvent(msg.event)) h.event(msg.event, false);
       if (msg.type === "counts" && isCounts(msg.counts)) h.counts(msg.counts);
       if (msg.type === "history") h.history?.();
+      if (msg.type === "services" && isServices(msg.services)) h.services?.(msg.services);
     };
     ws.onclose = () => {
       if (!everLive && !demo) demo = startDemo(h);

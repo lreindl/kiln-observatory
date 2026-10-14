@@ -1,5 +1,6 @@
 // The Worker: receives GitHub webhooks, maps them through the allowlist and
 // hands them to the Studio object; serves the live feed and the built site.
+// A cron checks the studio's services from outside for the uptime level.
 
 import { toPublicEvent, itemKey } from "./allowlist";
 import { verifySignature } from "./signature";
@@ -44,8 +45,14 @@ export default {
 
     if (url.pathname === "/api/live") return studio.fetch(request);
     if (url.pathname === "/api/history") return Response.json({ events: await studio.history() }, { headers: { "Cache-Control": "public, max-age=30" } });
+    if (url.pathname === "/api/services") return Response.json({ services: await studio.services() }, { headers: { "Cache-Control": "public, max-age=60" } });
     if (url.pathname === "/api/state") return Response.json(await studio.snapshot(), { headers: { "Cache-Control": "no-store" } });
     if (url.pathname.startsWith("/api/")) return new Response("Not found", { status: 404 });
     return env.ASSETS.fetch(request);
+  },
+
+  /** The five-minute cron: check every service. */
+  async scheduled(_event, env, ctx): Promise<void> {
+    ctx.waitUntil(env.STUDIO.get(env.STUDIO.idFromName("studio")).checkServices());
   },
 } satisfies ExportedHandler<Env>;
