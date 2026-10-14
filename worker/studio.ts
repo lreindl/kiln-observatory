@@ -14,6 +14,8 @@ const RECENT = 40;
 const HISTORY_LIMIT = 5000;
 const RECONCILE_EVERY = 10 * 60_000;
 const RECONCILE_AFTER_EVENT = 20_000;
+/** How often the services are checked. The alarm drives it; the cron is a backstop. */
+const CHECK_EVERY = 5 * 60_000;
 const BACKFILL_VERSION = "backfill-v1";
 /** Uptime shown and kept, in days. */
 const UPTIME_DAYS = 90;
@@ -32,7 +34,7 @@ export class Studio extends DurableObject<Env> {
     this.ctx.acceptWebSocket(server);
     server.send(JSON.stringify({ type: "snapshot", snapshot: await this.snapshot() } satisfies ServerMessage));
     // A new studio (or one whose counts never loaded) reconciles at once rather than in ten minutes.
-    await this.ensureAlarm((await this.ctx.storage.get("counts")) ? RECONCILE_EVERY : 1000);
+    await this.wantReconcile((await this.ctx.storage.get("counts")) ? RECONCILE_EVERY : 1000);
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -78,12 +80,29 @@ export class Studio extends DurableObject<Env> {
     if (!this.store(event)) return;
     await this.ctx.storage.put("updatedAt", new Date().toISOString());
     this.broadcast({ type: "event", event });
-    await this.ensureAlarm(RECONCILE_AFTER_EVENT);
+    await this.wantReconcile(RECONCILE_AFTER_EVENT);
   }
 
+  /**
+   * One alarm serves two clocks: a reconcile when one is due (asked for by a
+   * browser connecting or a new event), and the service checks every five
+   * minutes, which keep the alarm going whether or not anyone is watching.
+   */
   async alarm(): Promise<void> {
-    await this.reconcile();
-    if (this.ctx.getWebSockets().length) await this.ensureAlarm(RECONCILE_EVERY);
+    const due = await this.ctx.storage.get<number>("reconcileAt");
+    if (due !== undefined && due <= Date.now() + 1000) {
+      await this.ctx.storage.delete("reconcileAt");
+      await this.reconcile();
+      if (this.ctx.getWebSockets().length) await this.wantReconcile(RECONCILE_EVERY);
+    }
+    await this.checkServices();
+  }
+
+  private async wantReconcile(inMs: number): Promise<void> {
+    const due = Date.now() + inMs;
+    const cur = await this.ctx.storage.get<number>("reconcileAt");
+    if (cur === undefined || cur > due) await this.ctx.storage.put("reconcileAt", due);
+    await this.ensureAlarm(inMs);
   }
 
   /** Rebuilds the game list and counts from GitHub, so a missed webhook heals; backfills history once. */
@@ -119,18 +138,34 @@ export class Studio extends DurableObject<Env> {
     this.broadcast({ type: "history" });
   }
 
-  /** Checks every service once (the five-minute cron), stores the outcome and pushes the new view. */
+  /**
+   * Checks every service unless they were checked in the last five minutes,
+   * stores the outcome, pushes the new view and sets the alarm for the next round.
+   * The alarm calls it, and the cron as a backstop that restarts the alarm.
+   */
   async checkServices(): Promise<void> {
+    const last = (await this.ctx.storage.get<number>("checkedAt")) ?? 0;
+    if (Date.now() - last < CHECK_EVERY - 30_000) {
+      await this.ensureAlarm(Math.max(1000, last + CHECK_EVERY - Date.now()));
+      return;
+    }
+    await this.ctx.storage.put("checkedAt", Date.now());
+    await this.ensureAlarm(CHECK_EVERY);
     const at = new Date().toISOString();
     const states = await Promise.all(SERVICES.map(async (s) => combine(await Promise.all(s.checks.map((u) => probe(u))))));
     SERVICES.forEach((s, i) => this.ctx.storage.sql.exec("INSERT OR REPLACE INTO checks (service, at, state) VALUES (?, ?, ?)", s.id, at, states[i]));
     this.ctx.storage.sql.exec("DELETE FROM checks WHERE at < ?", new Date(Date.now() - (UPTIME_DAYS + 1) * 86_400_000).toISOString());
-    const services = this.services();
+    const services = this.view();
     if (isServices(services)) this.broadcast({ type: "services", services });
   }
 
-  /** Each service's latest state and its days of checks. */
-  services(): Service[] {
+  /** Each service's latest state and its days of checks; starts the checks if they have stopped. */
+  async services(): Promise<Service[]> {
+    if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(Date.now() + 1000);
+    return this.view();
+  }
+
+  private view(): Service[] {
     const since = new Date(Date.now() - UPTIME_DAYS * 86_400_000).toISOString();
     const rows = this.ctx.storage.sql.exec<{ service: string; at: string; state: string }>("SELECT service, at, state FROM checks WHERE at >= ?", since).toArray();
     const out = summarize(SERVICES, rows.map((r) => ({ ...r, state: r.state as ServiceState }) satisfies CheckRow), Date.now(), UPTIME_DAYS);
