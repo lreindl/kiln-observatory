@@ -83,11 +83,16 @@ export class Field {
     this.canvas.style.height = `${this.h}px`;
   }
 
+  /** Which dot holds which formation point, kept so a data-only redraw can reuse it. */
+  private perm: number[] = [];
+
   /**
    * Sends every dot to the formation. Dots beyond the formation drift as faint
-   * dust. `from` gives the stagger origin: dots nearer it move first.
+   * dust. `from` gives the stagger origin: dots nearer it move first. `stable`
+   * is for redrawing the same level with new data: each dot keeps the point it
+   * had, so only what changed moves.
    */
-  form(f: Formation, opts: { stagger?: number; from?: Pt } = {}): void {
+  form(f: Formation, opts: { stagger?: number; from?: Pt; stable?: boolean } = {}): void {
     const stagger = this.reduced ? 0 : opts.stagger ?? 0.5;
     const origin = opts.from ?? { x: 0, y: 0 };
     let far = 1;
@@ -98,9 +103,14 @@ export class Field {
       const prev = keepGroups.get(id);
       this.groups.set(id, { c, rot: prev?.rot ?? 0, scale: prev?.scale ?? 1, alpha: prev?.alpha ?? 1, tScale: 1, tAlpha: 1, spin: prev?.spin ?? 0, jitter: prev?.jitter ?? 0, scatter: 0 });
     }
-    // Shuffle which dot takes which point, so dots travel interesting paths.
-    const order = Array.from({ length: this.n }, (_, i) => i);
-    for (let i = order.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [order[i], order[j]] = [order[j], order[i]]; }
+    // Shuffle which dot takes which point, so dots travel interesting paths;
+    // a stable redraw keeps the last assignment.
+    let order = this.perm;
+    if (!opts.stable || order.length !== this.n) {
+      order = Array.from({ length: this.n }, (_, i) => i);
+      for (let i = order.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [order[i], order[j]] = [order[j], order[i]]; }
+      this.perm = order;
+    }
     for (let k = 0; k < this.n; k++) {
       const i = order[k];
       const p = f.points[k];
@@ -109,6 +119,8 @@ export class Field {
         this.tsize[i] = p.size ?? 1.3; this.talpha[i] = p.alpha ?? 0.92;
         this.group[i] = p.group ?? null;
         this.delay[i] = (Math.hypot(p.x - origin.x, p.y - origin.y) / far) * stagger + Math.random() * 0.08;
+      } else if (opts.stable && !this.group[i] && this.talpha[i] < 0.2) {
+        // Already dust: leave it be.
       } else {
         // Dust: dots with no place in the formation settle where they are, faint,
         // rather than streaking across the screen.
@@ -119,7 +131,7 @@ export class Field {
       }
     }
     this.guides = f.guides;
-    this.guideAlpha = 0;
+    if (!opts.stable) this.guideAlpha = 0;
     this.formedAt = this.time;
   }
 

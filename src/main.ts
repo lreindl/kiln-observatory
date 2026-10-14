@@ -388,7 +388,7 @@ function onEvent(e: PublicEvent): void {
     }
   } else if (current.level === "agent" && current.id && id === current.id && !busy) {
     const view = agent(field.width, field.height, st, current.id, eventsFor(current.id), Date.now());
-    field.form(view.formation, { stagger: 0.2, from: st.agents[current.id] });
+    field.form(view.formation, { stagger: 0.2, from: st.agents[current.id], stable: true });
     fillPanel(current.id);
     field.pulse(st.up[current.id], 1.4);
     if (failed) field.scatter(current.id);
@@ -397,16 +397,18 @@ function onEvent(e: PublicEvent): void {
 }
 
 let historyStale = false;
+let historyLoaded: () => void = () => {};
+const historyReady = new Promise<void>((r) => (historyLoaded = r));
 
 /** Redraws the current level with the latest history (strips, rings). Waits out any camera move. */
 function reform(): void {
   if (!historyStale) return;
   historyStale = false;
-  if (current.level === "studio") { build(); field.form(st.formation, { stagger: 0.3, from: st.core }); }
+  if (current.level === "studio") { build(); field.form(st.formation, { stagger: 0.3, from: st.core, stable: true }); }
   if (current.level === "agent" && current.id) {
     build();
     const view = agent(field.width, field.height, st, current.id, eventsFor(current.id), Date.now());
-    field.form(view.formation, { stagger: 0.3, from: st.agents[current.id] });
+    field.form(view.formation, { stagger: 0.3, from: st.agents[current.id], stable: true });
     dim(current.id);
     fillPanel(current.id);
   }
@@ -421,6 +423,7 @@ async function loadHistory(): Promise<void> {
     if (!history.length) { history = demoHistory(Date.now()); demo = true; }
   }
   historyStale = true;
+  historyLoaded();
   if (!busy) reform();
   refreshStates();
 }
@@ -497,6 +500,10 @@ async function start(): Promise<void> {
     show("outside");
     await field.wait(1.6);
   } else {
+    // A direct link to the agents: wait (briefly) for the history, so the first
+    // draw already has it and nothing redraws a moment later.
+    await Promise.race([historyReady, new Promise((r) => setTimeout(r, 1500))]);
+    historyStale = false;
     build();
     field.form(st.formation, { stagger: 0.8, from: st.core });
     placeAgents();
@@ -527,4 +534,4 @@ loadHistory();
 start();
 
 // Dev only: step the clock by hand, for checking motion when the page isn't painting.
-if (import.meta.env.DEV) Object.assign(window, { kilnStep: (seconds: number, fps = 30) => { for (let i = 0; i < seconds * fps; i++) field.step(1 / fps); field.render(); } });
+if (import.meta.env.DEV) Object.assign(window, { kilnField: field, kilnStep: (seconds: number, fps = 30) => { for (let i = 0; i < seconds * fps; i++) field.step(1 / fps); field.render(); } });

@@ -77,6 +77,8 @@ export function studio(w: number, h: number, events: PublicEvent[] = [], now = D
   const kh = narrow ? 38 : 54;
   const step = 2.2;
   const points: FPoint[] = [];
+  /** Dots whose count depends on the data; drawn after the fixed ones. */
+  const tail: FPoint[] = [];
   const guides: Guide[] = [];
   const groups: Record<string, Pt> = {};
   const trace = (pts: Pt[], group: string, alpha = 0.6) => { for (const p of resample(pts, step * 1.5)) points.push({ ...p, size: 1.05, alpha, group }); };
@@ -133,7 +135,7 @@ export function studio(w: number, h: number, events: PublicEvent[] = [], now = D
     const random = rng(i + 1);
     for (let k2 = 0; k2 < Math.min(narrow ? 50 : 90, total * 4); k2++) {
       const a = random() * Math.PI * 2, rr = r * (1.25 + Math.sqrt(random()) * 0.75);
-      points.push({ x: g.x + Math.cos(a) * rr, y: g.y + Math.sin(a) * rr, size: 0.6, alpha: 0.32, group: `halo-${cell.id}` });
+      tail.push({ x: g.x + Math.cos(a) * rr, y: g.y + Math.sin(a) * rr, size: 0.6, alpha: 0.32, group: `halo-${cell.id}` });
     }
     groups[`halo-${cell.id}`] = g;
     daily.forEach((n, d) => {
@@ -146,6 +148,7 @@ export function studio(w: number, h: number, events: PublicEvent[] = [], now = D
     guides.push({ kind: "line", a: { x: labelX, y: y + rowH / 2 }, b: { x: stripX + days * colW, y: y + rowH / 2 }, alpha: 0.05 });
   });
   guides.push({ kind: "text", at: { x: stripX, y: rows0 + 4 }, text: `last ${days} days`, alpha: 0.35, size: 12 });
+  points.push(...tail);
   return { kind: "tree", formation: { points, guides, groups }, r, agents, labels, rowH, core, folder, up, stripX, contentBottom: lastY + rowH / 2 };
 }
 
@@ -182,6 +185,8 @@ export function constellation(w: number, h: number, events: PublicEvent[] = [], 
   const spot = (id: CellId): Pt => place(portrait ? SKY_TALL[id] : SKY[id]);
   const r = portrait ? 12 : 15;
   const points: FPoint[] = [];
+  /** Dots whose count depends on the data; drawn after the fixed ones. */
+  const tail: FPoint[] = [];
   const guides: Guide[] = [];
   const groups: Record<string, Pt> = {};
   const agents = {} as Record<CellId, Pt>;
@@ -213,7 +218,7 @@ export function constellation(w: number, h: number, events: PublicEvent[] = [], 
     const random = rng(40 + i);
     for (let n = 0; n < Math.min(120, (totals.get(cell.id) ?? 0) * 5); n++) {
       const a = random() * Math.PI * 2, rr = r * (1.3 + Math.pow(random(), 1.6) * 1.4);
-      points.push({ x: p.x + Math.cos(a) * rr, y: p.y + Math.sin(a) * rr, size: 0.6, alpha: 0.35, group: `halo-${cell.id}` });
+      tail.push({ x: p.x + Math.cos(a) * rr, y: p.y + Math.sin(a) * rr, size: 0.6, alpha: 0.35, group: `halo-${cell.id}` });
     }
     groups[`halo-${cell.id}`] = p;
     up[cell.id] = [p, core];
@@ -236,13 +241,14 @@ export function constellation(w: number, h: number, events: PublicEvent[] = [], 
     const from = { x: A.x + ux * pad, y: A.y + uy * pad }, to = { x: B.x - ux * (b === "core" || a === "core" ? kh * 0.8 : pad), y: B.y - uy * (b === "core" || a === "core" ? kh * 0.8 : pad) };
     const spacing = Math.max(3.2, 16 / Math.sqrt(n));
     const group = `edge-${a}-${b}`;
-    for (const q of line(from, to, spacing)) points.push({ ...q, size: 0.9 + Math.min(0.9, n / 25), alpha: Math.min(0.95, 0.35 + n * 0.04), group });
+    for (const q of line(from, to, spacing)) tail.push({ ...q, size: 0.9 + Math.min(0.9, n / 25), alpha: Math.min(0.95, 0.35 + n * 0.04), group });
     groups[group] = { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 };
     // On a phone the counts crowd the labels; the density of the line carries it.
     if (!portrait) guides.push({ kind: "text", at: { x: (A.x + B.x) / 2 + uy * 12, y: (A.y + B.y) / 2 - ux * 12 + 4 }, text: String(n), alpha: 0.4, align: "center", size: 11 });
   }
   void lanes;
   const contentBottom = Math.max(core.y + kh * 0.9, ...Object.values(labels).map((l) => l.y + 44));
+  points.push(...tail);
   return { kind: "sky", formation: { points, guides, groups }, r, agents, labels, rowH: 0, core, folder: core, up, stripX: 0, contentBottom };
 }
 
