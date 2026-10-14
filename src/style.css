@@ -123,6 +123,8 @@ h1 { margin: 0; font-weight: 300; font-size: clamp(32px, 5.4vw, 68px); letter-sp
   .panel { left: var(--gutter); right: var(--gutter); width: auto; top: auto; height: 42%; bottom: calc(env(safe-area-inset-bottom, 0px) + 10px); background: linear-gradient(transparent, #000 28px); padding-top: 24px; }
   .panel h2 { font-size: 32px; }
   .live #counts { display: none; }
+  #outside { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 64px); }
+  .credit { left: 0; right: 0; text-align: center; }
   .crumbs { font-size: 12px; gap: 8px; letter-spacing: .1em; }
   .live { font-size: 11px; }
 }
