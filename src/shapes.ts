@@ -47,9 +47,9 @@ export function regular(cx: number, cy: number, r: number, sides: number, rot: n
 export const rect = (x: number, y: number, w: number, h: number, step: number) =>
   poly([{ x, y }, { x: x + w, y }, { x: x + w, y: y + h }, { x, y: y + h }], step);
 
-// ---------- agent glyphs ----------
+// ---------- glyphs: agents and services ----------
 
-/** Each agent's figure, centred on (cx, cy) with radius r. No two alike. */
+/** Each agent's (or service's) figure, centred on (cx, cy) with radius r. No two alike. */
 export function glyph(id: string, cx: number, cy: number, r: number, step: number): Pt[] {
   const s = step;
   switch (id) {
@@ -92,6 +92,17 @@ export function glyph(id: string, cx: number, cy: number, r: number, step: numbe
         ...resample([{ x: cx - r * 0.6, y: cy + r * 0.75 }, { x: cx, y: cy + r * 0.45 }, { x: cx + r * 0.6, y: cy + r * 0.75 }], s * 0.8),
         ...resample([{ x: cx - r * 0.6, y: cy + r * 1.05 }, { x: cx, y: cy + r * 0.75 }, { x: cx + r * 0.6, y: cy + r * 1.05 }], s * 0.8),
       ];
+    // ---------- services ----------
+    case "pinhigh": // a flag on its pin, over the hole
+      return [
+        ...line({ x: cx - r * 0.25, y: cy + r * 0.85 }, { x: cx - r * 0.25, y: cy - r }, s),
+        ...poly([{ x: cx - r * 0.25, y: cy - r }, { x: cx + r * 0.85, y: cy - r * 0.62 }, { x: cx - r * 0.25, y: cy - r * 0.24 }], s * 0.8),
+        ...poly(Array.from({ length: 24 }, (_, i) => ({ x: cx - r * 0.25 + Math.cos((i / 24) * Math.PI * 2) * r * 0.7, y: cy + r * 0.85 + Math.sin((i / 24) * Math.PI * 2) * r * 0.22 })), s * 0.8),
+      ];
+    case "d2factory": { // a crate seen from a corner: a hexagon with its three edges in
+      const pts = Array.from({ length: 6 }, (_, i) => ({ x: cx + Math.cos(-Math.PI / 2 + (i / 6) * Math.PI * 2) * r, y: cy + Math.sin(-Math.PI / 2 + (i / 6) * Math.PI * 2) * r }));
+      return [...poly(pts, s), ...line({ x: cx, y: cy }, pts[0], s), ...line({ x: cx, y: cy }, pts[2], s), ...line({ x: cx, y: cy }, pts[4], s)];
+    }
     default:
       return circle(cx, cy, r, s);
   }

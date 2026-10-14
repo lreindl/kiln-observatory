@@ -1,14 +1,15 @@
 import "./style.css";
-import type { Counts, PublicEvent } from "../shared/public";
+import { isServices, type Counts, type PublicEvent, type Service } from "../shared/public";
 import { CREDIT } from "./credit";
 import { CELLS, cellFor, describe, flow, schedule, weight, type CellId } from "./crew";
-import { demoHistory } from "./demo";
+import { demoHistory, demoServices } from "./demo";
 import { connect, type Status } from "./feed";
 import { Field } from "./field";
-import { agent, constellation, outside, route, studio, type Studio } from "./levels";
+import { agent, constellation, outside, route, services, studio, type Services, type Studio } from "./levels";
 import { markSvg } from "./mark";
+import type { Pt } from "./shapes";
 
-type Level = "outside" | "studio" | "agent";
+type Level = "outside" | "studio" | "agent" | "services";
 type View = "tree" | "sky";
 interface Route { level: Level; id?: CellId; view?: View }
 
@@ -20,6 +21,8 @@ let history: PublicEvent[] = [];
 let counts: Counts | null = null;
 let demo = false;
 let st: Studio = studio(field.width, field.height);
+let svcList: Service[] = [];
+let sv: Services = services(field.width, field.height, []);
 /** The agents level shows as a folder tree (the default) or a constellation. */
 let view: View = "tree";
 /** The owner first, then whoever runs next: anyone in a run window now, then the soonest scheduled. Follows the schedule only, so rows move when runs start and end, not on every event. */
@@ -74,12 +77,13 @@ function parse(): Route {
   const h = location.hash.slice(1);
   if (h === "studio") return { level: "studio", view: "tree" };
   if (h === "constellation") return { level: "studio", view: "sky" };
+  if (h === "services") return { level: "services" };
   const m = /^agent-(\w+)$/.exec(h);
   if (m && CELLS.some((c) => c.id === m[1])) return { level: "agent", id: m[1] as CellId };
   return { level: "outside" };
 }
 const studioHash = (v: View) => (v === "sky" ? "#constellation" : "#studio");
-const hashFor = (r: Route) => (r.level === "outside" ? "" : r.level === "studio" ? studioHash(r.view ?? view) : `#agent-${r.id}`);
+const hashFor = (r: Route) => (r.level === "outside" ? "" : r.level === "studio" ? studioHash(r.view ?? view) : r.level === "services" ? "#services" : `#agent-${r.id}`);
 function navigate(r: Route): void {
   const want = hashFor(r);
   if (want === location.hash || (want === "" && location.hash === "")) return;
@@ -94,8 +98,11 @@ addEventListener("hashchange", () => go(parse()));
 addEventListener("popstate", () => go(parse()));
 
 function show(level: Level | null): void {
-  for (const l of ["outside", "studio", "agent"] as const) $(l).classList.toggle("on", l === level);
+  for (const l of ["outside", "studio", "agent", "services"] as const) $(l).classList.toggle("on", l === level);
   if (level) document.body.dataset.level = level;
+  if (level) for (const [id, on] of [["crumb-studio", level === "studio"], ["crumb-services", level === "services"]] as const) {
+    if (on) $(id).setAttribute("aria-current", "page"); else $(id).removeAttribute("aria-current");
+  }
 }
 
 /** Moves between levels with the camera; a request made mid-flight runs after. */
@@ -111,9 +118,12 @@ async function go(to: Route): Promise<void> {
       syncViewControls();
       if (from.level === "studio") await switchView();
     }
-    if (from.level === "outside" && to.level !== "outside") await enterStudio();
-    if (from.level === "agent" && to.level !== "agent") await leaveAgent();
-    if (to.level === "outside" && from.level !== "outside") await exitStudio();
+    if (from.level === "outside" && (to.level === "studio" || to.level === "agent")) await enterStudio(outside(field.width, field.height).center, 1.1, 1.9);
+    if (from.level === "services" && to.level === "studio") await enterStudio(sv.core, 0.9, 1.3);
+    if (from.level === "services" && to.level === "agent") build();
+    if (from.level === "agent" && (to.level === "studio" || to.level === "outside")) await leaveAgent();
+    if (to.level === "services") await toServices(from.level);
+    if (to.level === "outside" && from.level !== "outside") await exitStudio(from.level === "services" ? sv.core : st.core);
     if (to.level === "agent") await toAgent(to.id!, from.level === "agent");
     current = to;
   } finally {
@@ -122,28 +132,44 @@ async function go(to: Route): Promise<void> {
   }
 }
 
-/** Enter: the mark's dots fly apart and re-form as the agents. */
-async function enterStudio(): Promise<void> {
+/** Enter: the mark's (or the services') dots fly apart and re-form as the agents. */
+async function enterStudio(from: Pt, stagger: number, wait: number): Promise<void> {
   show(null);
   build();
-  field.form(st.formation, { stagger: 1.1, from: outside(field.width, field.height).center });
+  field.form(st.formation, { stagger, from });
+  dim(null);
   current = { level: "studio" };
   placeAgents();
   refreshStates();
   window.scrollTo(0, 0);
-  await field.wait(1.9);
+  await field.wait(wait);
   show("studio");
   updateScroll();
 }
 
-/** Back outside: the agents gather back into the mark. */
-async function exitStudio(): Promise<void> {
+/** Back outside: the agents (or services) gather back into the mark. */
+async function exitStudio(from: Pt): Promise<void> {
   show(null);
   pinScroll();
   const out = outside(field.width, field.height);
-  field.form(out.formation, { stagger: 1, from: st.core });
+  field.form(out.formation, { stagger: 1, from });
   await Promise.all([field.camera({ x: 0, y: 0, s: 1 }, 0.8, "inOut"), field.wait(1.8)]);
   show("outside");
+}
+
+/** To the services: the dots re-form as one row per service, with its uptime. */
+async function toServices(from: Level): Promise<void> {
+  show(null);
+  pinScroll();
+  window.scrollTo(0, 0);
+  sv = services(field.width, field.height, svcList, Date.now());
+  const fromOutside = from === "outside";
+  field.form(sv.formation, { stagger: fromOutside ? 1.1 : 0.9, from: fromOutside ? outside(field.width, field.height).center : st.core });
+  current = { level: "services" };
+  placeServices();
+  refreshServices();
+  await Promise.all([field.camera({ x: 0, y: 0, s: 1 }, 0.9, "inOut"), field.wait(fromOutside ? 1.9 : 1.3)]);
+  show("services");
 }
 
 /** Folder ⇄ constellation: the same dots fly from one arrangement to the other. */
@@ -296,6 +322,75 @@ function refreshStates(): void {
 }
 setInterval(refreshStates, 15_000);
 
+// ---------- the services' labels ----------
+
+const svcRows = new Map<string, HTMLDivElement>();
+
+/** One row per service, laid out like an agent's: figure, name and state, uptime strip. */
+function placeServices(): void {
+  const W = field.width / 2, H = field.height / 2;
+  for (const [id, el] of svcRows) if (!svcList.some((s) => s.id === id)) { el.remove(); svcRows.delete(id); }
+  for (const s of svcList) {
+    let el = svcRows.get(s.id);
+    if (!el) {
+      el = document.createElement("div");
+      el.className = "agent-btn";
+      el.setAttribute("role", "group");
+      el.innerHTML = `<span class="name"></span><span class="state"></span>`;
+      $("service-rows").appendChild(el);
+      svcRows.set(s.id, el);
+    }
+    const g = sv.rows[s.id], l = sv.labels[s.id];
+    if (!g) continue;
+    const left = g.x - sv.r - 10 + W;
+    el.style.left = `${left}px`;
+    el.style.top = `${g.y - sv.rowH / 2 + H}px`;
+    el.style.height = `${sv.rowH}px`;
+    el.style.width = `${sv.stripX + sv.days * sv.colW + W - left}px`;
+    el.style.paddingLeft = `${l.x + W - left}px`;
+  }
+}
+
+/** Uptime over the days the strip shows, rounded down so a bad day never reads as 100%. */
+function uptime(s: Service): string | null {
+  const shown = s.days.slice(-sv.days);
+  const checks = shown.reduce((a, d) => a + d.checks, 0);
+  if (!checks) return null;
+  const pct = (shown.reduce((a, d) => a + d.up + d.degraded * 0.5, 0) / checks) * 100;
+  return pct === 100 ? "100%" : `${Math.min(99.99, Math.floor(pct * 100) / 100)}%`;
+}
+
+function refreshServices(): void {
+  for (const s of svcList) {
+    const el = svcRows.get(s.id);
+    if (!el) continue;
+    const pct = uptime(s);
+    el.dataset.state = s.state ?? "unknown";
+    el.querySelector(".name")!.textContent = s.name;
+    el.querySelector(".state")!.textContent = s.state ? `${s.state}${pct ? ` · ${pct}` : ""}` : "not checked yet";
+    el.setAttribute("aria-label", `${s.name}: ${s.state ?? "not checked yet"}${pct ? `, ${pct} uptime over ${sv.days} days` : ""}${s.checkedAt ? `, checked ${ago(s.checkedAt)}` : ""}`);
+    el.title = s.checkedAt ? `checked ${ago(s.checkedAt)}` : "";
+  }
+}
+
+let servicesStale = false;
+function redrawServices(): void {
+  servicesStale = false;
+  sv = services(field.width, field.height, svcList, Date.now());
+  field.form(sv.formation, { stagger: 0.3, from: sv.core, stable: true });
+  placeServices();
+  refreshServices();
+}
+
+function onServices(list: Service[]): void {
+  const wasDown = new Set(svcList.filter((s) => s.state === "down").map((s) => s.id));
+  svcList = list;
+  if (current.level !== "services") return;
+  if (busy) { servicesStale = true; return; }
+  redrawServices();
+  for (const s of list) if (s.state === "down" && !wasDown.has(s.id)) field.scatter(s.id);
+}
+
 // ---------- the agent panel ----------
 
 const eventsFor = (id: CellId) => history.filter((e) => cellFor(e) === id);
@@ -402,6 +497,7 @@ const historyReady = new Promise<void>((r) => (historyLoaded = r));
 
 /** Redraws the current level with the latest history (strips, rings). Waits out any camera move. */
 function reform(): void {
+  if (servicesStale && current.level === "services") redrawServices();
   if (!historyStale) return;
   historyStale = false;
   if (current.level === "studio") { build(); field.form(st.formation, { stagger: 0.3, from: st.core, stable: true }); }
@@ -428,6 +524,23 @@ async function loadHistory(): Promise<void> {
   refreshStates();
 }
 
+let servicesLoaded: () => void = () => {};
+const servicesReady = new Promise<void>((r) => (servicesLoaded = r));
+
+async function loadServices(): Promise<void> {
+  try {
+    const res = await fetch("/api/services");
+    if (!res.ok || !res.headers.get("content-type")?.includes("json")) throw new Error(String(res.status));
+    const list = ((await res.json()) as { services: unknown }).services;
+    if (!isServices(list)) throw new Error("not services");
+    svcList = list;
+  } catch {
+    if (!svcList.length) { svcList = demoServices(Date.now()); demo = true; }
+  }
+  servicesLoaded();
+  if (current.level === "services") { if (busy) servicesStale = true; else redrawServices(); }
+}
+
 const STATUS: Record<Status, string> = { connecting: "connecting", live: "live", offline: "reconnecting", demo: "demo data" };
 connect({
   status(s) {
@@ -445,6 +558,7 @@ connect({
   event: onEvent,
   counts(c) { counts = c; refreshStates(); },
   history: loadHistory,
+  services: onServices,
 });
 
 // ---------- start ----------
@@ -484,6 +598,7 @@ addEventListener("resize", () => {
     if (current.level === "studio") updateScroll();
     if (current.level === "outside") field.form(outside(field.width, field.height).formation, { stagger: 0.2 });
     if (current.level === "studio") field.form(st.formation, { stagger: 0.2 });
+    if (current.level === "services") { sv = services(field.width, field.height, svcList, Date.now()); field.form(sv.formation, { stagger: 0.2 }); placeServices(); }
     if (current.level === "agent" && current.id) { const v = agent(field.width, field.height, st, current.id, eventsFor(current.id), Date.now()); field.form(v.formation, { stagger: 0.2 }); dim(current.id); field.cam = v.camera; }
   }, 150);
 });
@@ -499,6 +614,17 @@ async function start(): Promise<void> {
     field.form(o.formation, { stagger: 1.4, from: o.center });
     show("outside");
     await field.wait(1.6);
+  } else if (route.level === "services") {
+    // A direct link to the services: wait (briefly) for their checks.
+    await Promise.race([servicesReady, new Promise((r) => setTimeout(r, 1500))]);
+    servicesStale = false;
+    sv = services(field.width, field.height, svcList, Date.now());
+    field.form(sv.formation, { stagger: 0.8, from: sv.core });
+    current = { level: "services" };
+    placeServices();
+    refreshServices();
+    await field.wait(1.4);
+    show("services");
   } else {
     // A direct link to the agents: wait (briefly) for the history, so the first
     // draw already has it and nothing redraws a moment later.
@@ -531,6 +657,8 @@ function frame(now: number): void {
 }
 requestAnimationFrame(frame);
 loadHistory();
+loadServices();
+setInterval(() => { if (current.level === "services") refreshServices(); }, 30_000);
 start();
 
 // Dev only: step the clock by hand, for checking motion when the page isn't painting.

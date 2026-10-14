@@ -57,7 +57,9 @@ export type ServerMessage =
   | { type: "event"; event: PublicEvent }
   | { type: "counts"; counts: Counts }
   /** History was rebuilt; fetch /api/history again. */
-  | { type: "history" };
+  | { type: "history" }
+  /** A round of service checks finished. */
+  | { type: "services"; services: Service[] };
 
 export const GAME_LABEL = /^(factory|game-\d{1,3}|[A-Za-z0-9][A-Za-z0-9 :'&!.-]{0,39})$/;
 const ITEM = /^[0-9a-f]{12}$/;
@@ -90,3 +92,62 @@ export function isCounts(c: unknown): c is Counts {
   const keys = Object.keys(o);
   return keys.length === 3 && ["ready", "openPRs", "approvals"].every((k) => Number.isInteger(o[k]) && (o[k] as number) >= 0);
 }
+
+// ---------- services (uptime) ----------
+// Each service is checked from outside, as a player would reach it. Only the
+// outcome leaves the Worker: no URLs, status codes or timings.
+
+export const SERVICE_STATES = ["up", "degraded", "down"] as const;
+export type ServiceState = (typeof SERVICE_STATES)[number];
+
+/** One UTC day of checks. */
+export interface ServiceDay {
+  /** YYYY-MM-DD, UTC. */
+  day: string;
+  checks: number;
+  up: number;
+  degraded: number;
+}
+
+export interface Service {
+  id: string;
+  name: string;
+  /** The latest check, or null before the first. */
+  state: ServiceState | null;
+  checkedAt: string | null;
+  /** Days with checks, oldest first. */
+  days: ServiceDay[];
+}
+
+const SERVICE_ID = /^[a-z0-9-]{1,24}$/;
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const SERVICE_KEYS = ["id", "name", "state", "checkedAt", "days"];
+const DAY_KEYS = ["day", "checks", "up", "degraded"];
+const MAX_DAYS = 120;
+const exactly = (o: Record<string, unknown>, keys: string[]) => {
+  const k = Object.keys(o);
+  return k.length === keys.length && k.every((x) => keys.includes(x));
+};
+const count = (v: unknown) => Number.isInteger(v) && (v as number) >= 0;
+
+export function isServiceDay(d: unknown): d is ServiceDay {
+  if (typeof d !== "object" || d === null || Array.isArray(d)) return false;
+  const o = d as Record<string, unknown>;
+  if (!exactly(o, DAY_KEYS)) return false;
+  if (typeof o.day !== "string" || !DAY.test(o.day)) return false;
+  if (!count(o.checks) || !count(o.up) || !count(o.degraded)) return false;
+  return (o.up as number) + (o.degraded as number) <= (o.checks as number);
+}
+
+export function isService(s: unknown): s is Service {
+  if (typeof s !== "object" || s === null || Array.isArray(s)) return false;
+  const o = s as Record<string, unknown>;
+  if (!exactly(o, SERVICE_KEYS)) return false;
+  if (typeof o.id !== "string" || !SERVICE_ID.test(o.id)) return false;
+  if (typeof o.name !== "string" || !GAME_LABEL.test(o.name)) return false;
+  if (o.state !== null && !oneOf(SERVICE_STATES, o.state)) return false;
+  if (o.checkedAt !== null && (typeof o.checkedAt !== "string" || !ISO.test(o.checkedAt))) return false;
+  return Array.isArray(o.days) && o.days.length <= MAX_DAYS && o.days.every(isServiceDay);
+}
+
+export const isServices = (v: unknown): v is Service[] => Array.isArray(v) && v.length <= 12 && v.every(isService);

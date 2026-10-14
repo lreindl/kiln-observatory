@@ -3,23 +3,27 @@
 // browsers over hibernating WebSockets, and rebuilds history from GitHub once.
 
 import { DurableObject } from "cloudflare:workers";
-import { isCounts, isPublicEvent, type Counts, type PublicEvent, type ServerMessage, type Snapshot } from "../shared/public";
+import { isCounts, isPublicEvent, isServices, type Counts, type PublicEvent, type ServerMessage, type Service, type ServiceState, type Snapshot } from "../shared/public";
 import { toPublicEvent, itemKey } from "./allowlist";
 import { history } from "./backfill";
 import { fetchCounts, fetchCoveredRepos } from "./github";
 import type { Env } from "./index";
+import { SERVICES, combine, probe, summarize, type CheckRow } from "./services";
 
 const RECENT = 40;
 const HISTORY_LIMIT = 5000;
 const RECONCILE_EVERY = 10 * 60_000;
 const RECONCILE_AFTER_EVENT = 20_000;
 const BACKFILL_VERSION = "backfill-v1";
+/** Uptime shown and kept, in days. */
+const UPTIME_DAYS = 90;
 
 export class Studio extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS events (key TEXT PRIMARY KEY, at TEXT NOT NULL, json TEXT NOT NULL)");
     ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS events_at ON events (at)");
+    ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS checks (service TEXT NOT NULL, at TEXT NOT NULL, state TEXT NOT NULL, PRIMARY KEY (service, at))");
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -113,6 +117,24 @@ export class Studio extends DurableObject<Env> {
     await this.ctx.storage.put(BACKFILL_VERSION, new Date().toISOString());
     console.log(`backfill stored ${n} events`);
     this.broadcast({ type: "history" });
+  }
+
+  /** Checks every service once (the five-minute cron), stores the outcome and pushes the new view. */
+  async checkServices(): Promise<void> {
+    const at = new Date().toISOString();
+    const states = await Promise.all(SERVICES.map(async (s) => combine(await Promise.all(s.checks.map((u) => probe(u))))));
+    SERVICES.forEach((s, i) => this.ctx.storage.sql.exec("INSERT OR REPLACE INTO checks (service, at, state) VALUES (?, ?, ?)", s.id, at, states[i]));
+    this.ctx.storage.sql.exec("DELETE FROM checks WHERE at < ?", new Date(Date.now() - (UPTIME_DAYS + 1) * 86_400_000).toISOString());
+    const services = this.services();
+    if (isServices(services)) this.broadcast({ type: "services", services });
+  }
+
+  /** Each service's latest state and its days of checks. */
+  services(): Service[] {
+    const since = new Date(Date.now() - UPTIME_DAYS * 86_400_000).toISOString();
+    const rows = this.ctx.storage.sql.exec<{ service: string; at: string; state: string }>("SELECT service, at, state FROM checks WHERE at >= ?", since).toArray();
+    const out = summarize(SERVICES, rows.map((r) => ({ ...r, state: r.state as ServiceState }) satisfies CheckRow), Date.now(), UPTIME_DAYS);
+    return isServices(out) ? out : []; // the contract is checked again at the last step
   }
 
   private async ensureAlarm(inMs: number): Promise<void> {
