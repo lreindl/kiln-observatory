@@ -26,8 +26,8 @@ export const CELLS: Cell[] = [
   { id: "ops", name: "Ops", short: "Ops", role: "Reads each game's health report and turns problems into issues.", times: [[6, 7], [18, 7]] },
   { id: "quality", name: "Quality auditor", short: "Quality", role: "Reads every codebase whole each week and files what's worth fixing.", times: [[9, 7]], days: [0] },
   { id: "analyst", name: "Analyst", short: "Analyst", role: "Answers one research question at a time, with sources.", times: [[11, 7]] },
-  { id: "pm", name: "PM", short: "PM", role: "Turns direction into the next work and readies it for the agents.", times: [[12, 7]] },
-  { id: "implementer", name: "Implementer", short: "Implementer", role: "Turns one ready issue into one pull request.", times: [[3, 7], [9, 7], [15, 7], [21, 7]] },
+  { id: "pm", name: "PM", short: "PM", role: "Turns direction into the next work and readies it for the agents.", times: [[0, 7], [12, 7]] },
+  { id: "implementer", name: "Implementer", short: "Implementer", role: "Turns one ready issue into one pull request.", times: [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23].map((h): [number, number] => [h, 7]) },
   { id: "reviewer", name: "Reviewer", short: "Reviewer", role: "Checks each pull request against the spec it claims to meet.", times: [[17, 7]] },
   { id: "digest", name: "Approval digest", short: "Digest", role: "Keeps the owner's one daily queue of everything waiting on them.", times: [[13, 7]] },
 ];
