@@ -8,7 +8,7 @@ import { Field } from "./field";
 import { agent, constellation, outside, route, services, studio, type Services, type Studio } from "./levels";
 import { markSvg } from "./mark";
 import type { Pt } from "./shapes";
-import { AMBIENT, PEAK, approach, glow, stage, target } from "./temp";
+import { AMBIENT, approach, target } from "./temp";
 
 type Level = "outside" | "studio" | "agent" | "services";
 type View = "tree" | "sky";
@@ -324,38 +324,21 @@ function refreshStates(): void {
 }
 setInterval(refreshStates, 15_000);
 
-// ---------- kiln temp ----------
+// ---------- internal temp ----------
 // Cosmetic: recent activity heats the kiln, quiet lets it cool (src/temp.ts).
 
-let kilnC = AMBIENT;
+let kilnF = AMBIENT;
 let kilnGoal = AMBIENT;
 let kilnPainted = 0;
 const kilnTarget = () => (kilnGoal = target(history, CELLS.filter((c) => stateOf(c.id).working).length));
 
-for (let t = 0; t <= PEAK; t += 100) {
-  const a = Math.PI * (1 - t / PEAK), major = t % 500 === 0, r0 = major ? 23 : 26;
-  const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-  line.setAttribute("class", major ? "tick major" : "tick");
-  for (const [k, r] of [["1", r0], ["2", 30]] as const) {
-    line.setAttribute(`x${k}`, (36 + r * Math.cos(a)).toFixed(2));
-    line.setAttribute(`y${k}`, (38 - r * Math.sin(a)).toFixed(2));
-  }
-  $("temp-ticks").appendChild(line);
-}
-
 function stepKiln(dt: number, now: number): void {
-  kilnC = approach(kilnC, kilnGoal, dt);
+  kilnF = approach(kilnF, kilnGoal, dt);
   if (now - kilnPainted < 200) return;
   kilnPainted = now;
   // A little flicker once it's hot, like a pyrometer near a flame.
-  const shown = Math.round(kilnC + (kilnC > 300 && !field.reduced ? Math.sin(now / 370) * 1.5 + Math.sin(now / 1130) * 2 : 0));
-  const f = Math.max(0, Math.min(1, shown / PEAK));
-  $("temp-fill").setAttribute("stroke-dasharray", `${f} 1`);
-  $("temp-needle").setAttribute("transform", `rotate(${(f * 180).toFixed(2)} 36 38)`);
-  $("temp").style.setProperty("--glow", glow(shown));
-  $("temp-c").textContent = `${shown.toLocaleString()}°C`;
-  $("temp-stage").textContent = stage(shown);
-  $("temp").setAttribute("aria-label", `Kiln temp ${shown}°C, ${stage(shown)}. Cosmetic: it rises with the studio's activity.`);
+  const shown = Math.round(kilnF + (kilnF > 600 && !field.reduced ? Math.sin(now / 370) * 3 + Math.sin(now / 1130) * 4 : 0));
+  $("temp-f").textContent = `${shown.toLocaleString()}°F`;
 }
 
 // ---------- the services' labels ----------

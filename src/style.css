@@ -43,20 +43,10 @@ body[data-level="agent"] #crumb-studio { color: var(--dim); }
 #status::before { content: "○ "; }
 #status[data-state="live"]::before { content: "● "; color: var(--ink); }
 #status[data-state="demo"] { color: var(--ink); }
-.right { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
-/* Kiln temp: a dial on the landing and agents levels. Only the fill glows, the colour of the heat. */
-.temp { display: flex; align-items: center; gap: 12px; pointer-events: auto; transition: opacity .6s; --glow: #fff; }
+/* Internal temp: cosmetic, on the landing and agents levels only. */
+.temp { transition: opacity .6s; }
+.temp b { font-weight: 400; color: var(--ink); font-variant-numeric: tabular-nums; }
 body[data-level="agent"] .temp, body[data-level="services"] .temp { opacity: 0; pointer-events: none; }
-.temp svg { overflow: visible; }
-.temp .track { fill: none; stroke: var(--line); stroke-width: 1; }
-.temp .fill { fill: none; stroke: var(--glow); stroke-width: 2.5; filter: drop-shadow(0 0 3px var(--glow)); }
-.temp .tick { stroke: var(--faint); stroke-width: 1; }
-.temp .tick.major { stroke: var(--dim); }
-.temp .needle { stroke: var(--ink); stroke-width: 1.2; stroke-linecap: round; }
-.temp circle { fill: var(--ink); }
-.temp-read { margin: 0; display: grid; justify-items: start; line-height: 1.25; min-width: 8.5em; }
-.temp-label, #temp-stage { font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--faint); }
-#temp-c { font-size: 20px; font-weight: 300; font-variant-numeric: tabular-nums; }
 
 .level { position: fixed; inset: 0; z-index: 2; pointer-events: none; opacity: 0; visibility: hidden; transition: opacity .6s ease, visibility 0s .6s; }
 .level.on { opacity: 1; visibility: visible; transition: opacity .8s ease .15s, visibility 0s; }
@@ -151,15 +141,6 @@ h1 { margin: 0; font-weight: 300; font-size: clamp(32px, 5.4vw, 68px); letter-sp
   .credit { left: 0; right: 0; text-align: center; }
   .crumbs { font-size: 12px; gap: 8px; letter-spacing: .1em; }
   .live { font-size: 11px; }
-  /* One line beside the status, so the bar stays two lines tall. */
-  .right { flex-direction: row; align-items: center; gap: 14px; }
-  .temp { gap: 6px; }
-  .temp svg { width: 34px; height: 20px; }
-  .temp .tick { display: none; }
-  .temp-read { display: flex; align-items: baseline; gap: 6px; min-width: 9em; }
-  #temp-c { font-size: 12px; font-weight: 400; }
-  .temp-label { font-size: 11px; letter-spacing: .08em; }
-  #temp-stage { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .level, .level.on { transition-duration: .2s; transition-delay: 0s; }

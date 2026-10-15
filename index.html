@@ -23,19 +23,7 @@
       <a href="#services" id="crumb-services" class="crumb" data-show="studio services">services</a>
       <span class="crumb" id="crumb-agent" data-show="agent"></span>
     </nav>
-    <div class="right">
-      <p class="live"><span id="status" data-state="connecting">connecting</span><span id="counts"></span></p>
-      <div class="temp" id="temp" role="img" aria-label="Kiln temp">
-        <svg viewBox="0 0 72 42" width="72" height="42" aria-hidden="true">
-          <g id="temp-ticks"></g>
-          <path class="track" d="M6 38 A30 30 0 0 1 66 38" pathLength="1"/>
-          <path class="fill" id="temp-fill" d="M6 38 A30 30 0 0 1 66 38" pathLength="1" stroke-dasharray="0 1"/>
-          <line class="needle" id="temp-needle" x1="36" y1="38" x2="12" y2="38"/>
-          <circle cx="36" cy="38" r="2.2"/>
-        </svg>
-        <p class="temp-read"><span class="temp-label">kiln temp</span><span id="temp-c">20°C</span><span id="temp-stage">cold</span></p>
-      </div>
-    </div>
+    <p class="live"><span id="status" data-state="connecting">connecting</span><span id="counts"></span><span id="temp" class="temp">internal temp <b id="temp-f">68°F</b></span></p>
   </header>
 
   <main>
