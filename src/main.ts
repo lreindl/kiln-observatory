@@ -8,6 +8,7 @@ import { Field } from "./field";
 import { agent, constellation, outside, route, services, studio, type Services, type Studio } from "./levels";
 import { markSvg } from "./mark";
 import type { Pt } from "./shapes";
+import { AMBIENT, approach, target } from "./temp";
 
 type Level = "outside" | "studio" | "agent" | "services";
 type View = "tree" | "sky";
@@ -319,8 +320,26 @@ function refreshStates(): void {
     placeAgents();
   }
   if (current.level === "agent" && current.id) fillFacts(current.id);
+  kilnTarget();
 }
 setInterval(refreshStates, 15_000);
+
+// ---------- internal temp ----------
+// Cosmetic: recent activity heats the kiln, quiet lets it cool (src/temp.ts).
+
+let kilnF = AMBIENT;
+let kilnGoal = AMBIENT;
+let kilnPainted = 0;
+const kilnTarget = () => (kilnGoal = target(history, CELLS.filter((c) => stateOf(c.id).working).length));
+
+function stepKiln(dt: number, now: number): void {
+  kilnF = approach(kilnF, kilnGoal, dt);
+  if (now - kilnPainted < 200) return;
+  kilnPainted = now;
+  // A little flicker once it's hot, like a pyrometer near a flame.
+  const shown = Math.round(kilnF + (kilnF > 600 && !field.reduced ? Math.sin(now / 370) * 3 + Math.sin(now / 1130) * 4 : 0));
+  $("temp-f").textContent = `${shown.toLocaleString()}°F`;
+}
 
 // ---------- the services' labels ----------
 
@@ -653,6 +672,7 @@ function frame(now: number): void {
   last = now;
   field.step(dt);
   field.render();
+  stepKiln(dt, now);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

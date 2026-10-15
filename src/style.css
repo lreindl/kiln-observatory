@@ -43,6 +43,10 @@ body[data-level="agent"] #crumb-studio { color: var(--dim); }
 #status::before { content: "○ "; }
 #status[data-state="live"]::before { content: "● "; color: var(--ink); }
 #status[data-state="demo"] { color: var(--ink); }
+/* Internal temp: cosmetic, on the landing and agents levels only. */
+.temp { transition: opacity .6s; }
+.temp b { font-weight: 400; color: var(--ink); font-variant-numeric: tabular-nums; }
+body[data-level="agent"] .temp, body[data-level="services"] .temp { opacity: 0; pointer-events: none; }
 
 .level { position: fixed; inset: 0; z-index: 2; pointer-events: none; opacity: 0; visibility: hidden; transition: opacity .6s ease, visibility 0s .6s; }
 .level.on { opacity: 1; visibility: visible; transition: opacity .8s ease .15s, visibility 0s; }
