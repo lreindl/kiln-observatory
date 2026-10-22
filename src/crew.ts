@@ -4,7 +4,7 @@
 
 import type { Agent, Kind, PublicEvent } from "../shared/public";
 
-export type CellId = "owner" | "analyst" | "ops" | "growth" | "quality" | "pm" | "digest" | "implementer" | "reviewer" | "release";
+export type CellId = "owner" | "design" | "analyst" | "verdicts" | "ops" | "growth" | "quality" | "pm" | "digest" | "implementer" | "reviewer" | "release";
 
 export interface Cell {
   id: CellId;
@@ -17,15 +17,18 @@ export interface Cell {
   days?: number[];
 }
 
-// Ring order follows the work: findings and research reach the PM, the PM readies
-// work, the implementer builds, the reviewer checks, the owner merges, release fires.
+// Ring order follows the work: the designer's ideas reach the analyst, findings,
+// research and readings reach the PM, the PM readies work, the implementer builds,
+// the reviewer checks, the owner merges, release fires.
 export const CELLS: Cell[] = [
   { id: "owner", name: "Owner", short: "Owner", role: "Sets direction, merges every pull request, approves gated actions.", times: [] },
   { id: "release", name: "Release", short: "Release", role: "Decides when a game ships, fires the release and watches the week after.", times: [[16, 7]], days: [1, 2, 3, 4, 5] },
   { id: "growth", name: "Growth", short: "Growth", role: "Keeps each store listing sharp and drafts what the owner says in public.", times: [[14, 7]], days: [1, 4] },
   { id: "ops", name: "Ops", short: "Ops", role: "Reads each game's health report and turns problems into issues.", times: [[6, 7], [18, 7]] },
   { id: "quality", name: "Quality auditor", short: "Quality", role: "Reads every codebase whole each week and files what's worth fixing.", times: [[9, 7]], days: [0] },
-  { id: "analyst", name: "Analyst", short: "Analyst", role: "Answers one research question at a time, with sources.", times: [[11, 7]] },
+  { id: "design", name: "Designer", short: "Designer", role: "Writes new game ideas and their prototypes, for the analyst to rank.", times: [[8, 7]], days: [2, 5] },
+  { id: "analyst", name: "Analyst", short: "Analyst", role: "Answers one research question at a time, with sources from outside the studio.", times: [[11, 7]] },
+  { id: "verdicts", name: "Verdicts analyst", short: "Verdicts", role: "Reads each game's own numbers and writes what they show: verdicts, retrospectives, readouts.", times: [[10, 7]] },
   { id: "pm", name: "PM", short: "PM", role: "Turns direction into the next work and readies it for the agents.", times: [[0, 7], [12, 7]] },
   { id: "implementer", name: "Implementer", short: "Implementer", role: "Turns one ready issue into one pull request.", times: [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23].map((h): [number, number] => [h, 7]) },
   { id: "reviewer", name: "Reviewer", short: "Reviewer", role: "Checks each pull request against the spec it claims to meet.", times: [[17, 7]] },
@@ -65,7 +68,8 @@ export function flow(e: PublicEvent): [CellId | "core", CellId | "core"] {
   const from = cellFor(e) ?? "core";
   if (e.kind === "issue.labelled" && e.stage === "ready") return ["pm", "implementer"];
   if (e.stage === "approval") return [from, "digest"];
-  if (e.kind === "issue.opened" && ["ops", "quality", "analyst", "growth"].includes(from)) return [from, "pm"];
+  if (e.kind === "issue.opened" && ["ops", "quality", "analyst", "verdicts", "growth"].includes(from)) return [from, "pm"];
+  if (e.kind === "issue.opened" && from === "design") return ["design", "analyst"];
   if (e.kind === "pr.opened" || e.kind === "pr.updated") return [from, from === "implementer" ? "reviewer" : "owner"];
   if (e.kind === "pr.reviewed") return ["reviewer", "owner"];
   if (e.kind === "pr.merged") return ["owner", "release"];

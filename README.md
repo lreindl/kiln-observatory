@@ -1,9 +1,9 @@
 # Kiln Observatory
 
 A live view of **Game Kiln**, an agentic game studio. Scheduled Claude Code
-routines (an analyst, ops, growth, a quality auditor, a PM, an implementer, a
-reviewer, release and an approval digest) build and run mobile games, handing
-work to each other through GitHub. The Observatory is a
+routines (a designer, an analyst, a verdicts analyst, ops, growth, a quality
+auditor, a PM, an implementer, a reviewer, release and an approval digest)
+build and run mobile games, handing work to each other through GitHub. The Observatory is a
 black field of white dots and hairline geometry, in three levels the dots re-form
 between: the Game Kiln mark, the agents as a folder tree wired by circuit traces, and one
 agent's record, drawn as rings of days with a dot for every event. Live events

@@ -55,8 +55,23 @@ export function glyph(id: string, cx: number, cy: number, r: number, step: numbe
   switch (id) {
     case "owner": // a diamond with a seat at its centre
       return [...regular(cx, cy, r, 4, -Math.PI / 2, s), ...circle(cx, cy, r * 0.28, s * 0.8)];
+    case "design": { // a spiral, an idea unwinding from its centre
+      const turns = 2.25, n = Math.max(24, Math.ceil((turns * Math.PI * 2 * r * 0.6) / s));
+      return Array.from({ length: n + 1 }, (_, i) => {
+        const t = i / n, a = -Math.PI / 2 + t * turns * Math.PI * 2, rr = r * (0.08 + 0.92 * t);
+        return { x: cx + Math.cos(a) * rr, y: cy + Math.sin(a) * rr };
+      });
+    }
     case "analyst": // ripples: three concentric rings
       return [...circle(cx, cy, r, s), ...circle(cx, cy, r * 0.64, s), ...circle(cx, cy, r * 0.28, s)];
+    case "verdicts": // a balance: a beam on its post, a pan hung from each end
+      return [
+        ...line({ x: cx, y: cy - r * 0.85 }, { x: cx, y: cy + r * 0.85 }, s),
+        ...line({ x: cx - r * 0.5, y: cy + r * 0.85 }, { x: cx + r * 0.5, y: cy + r * 0.85 }, s),
+        ...line({ x: cx - r, y: cy - r * 0.55 }, { x: cx + r, y: cy - r * 0.55 }, s),
+        ...line({ x: cx - r, y: cy - r * 0.55 }, { x: cx - r, y: cy }, s), ...line({ x: cx + r, y: cy - r * 0.55 }, { x: cx + r, y: cy }, s),
+        ...arc(cx - r, cy - r * 0.05, r * 0.38, 0, Math.PI, s * 0.8), ...arc(cx + r, cy - r * 0.05, r * 0.38, 0, Math.PI, s * 0.8),
+      ];
     case "ops": { // a hexagon crossed by a heartbeat
       const beat: Pt[] = [{ x: cx - r * 0.86, y: cy }, { x: cx - r * 0.3, y: cy }, { x: cx - r * 0.15, y: cy - r * 0.45 }, { x: cx + r * 0.05, y: cy + r * 0.4 }, { x: cx + r * 0.2, y: cy }, { x: cx + r * 0.86, y: cy }];
       return [...regular(cx, cy, r, 6, 0, s), ...resample(beat, s * 0.8)];
