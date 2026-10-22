@@ -95,7 +95,8 @@ export function isCounts(c: unknown): c is Counts {
 
 // ---------- services (uptime) ----------
 // Each service is checked from outside, as a player would reach it. Only the
-// outcome leaves the Worker: no URLs, status codes or timings.
+// outcome and the site's public address leave the Worker: no checked URLs,
+// status codes or timings.
 
 export const SERVICE_STATES = ["up", "degraded", "down"] as const;
 export type ServiceState = (typeof SERVICE_STATES)[number];
@@ -112,6 +113,8 @@ export interface ServiceDay {
 export interface Service {
   id: string;
   name: string;
+  /** The public site, an https origin such as "https://pinhigh.fun/". */
+  site: string;
   /** The latest check, or null before the first. */
   state: ServiceState | null;
   checkedAt: string | null;
@@ -121,7 +124,8 @@ export interface Service {
 
 const SERVICE_ID = /^[a-z0-9-]{1,24}$/;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
-const SERVICE_KEYS = ["id", "name", "state", "checkedAt", "days"];
+const SITE = /^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)+\/$/;
+const SERVICE_KEYS = ["id", "name", "site", "state", "checkedAt", "days"];
 const DAY_KEYS = ["day", "checks", "up", "degraded"];
 const MAX_DAYS = 120;
 const exactly = (o: Record<string, unknown>, keys: string[]) => {
@@ -145,6 +149,7 @@ export function isService(s: unknown): s is Service {
   if (!exactly(o, SERVICE_KEYS)) return false;
   if (typeof o.id !== "string" || !SERVICE_ID.test(o.id)) return false;
   if (typeof o.name !== "string" || !GAME_LABEL.test(o.name)) return false;
+  if (typeof o.site !== "string" || !SITE.test(o.site)) return false;
   if (o.state !== null && !oneOf(SERVICE_STATES, o.state)) return false;
   if (o.checkedAt !== null && (typeof o.checkedAt !== "string" || !ISO.test(o.checkedAt))) return false;
   return Array.isArray(o.days) && o.days.length <= MAX_DAYS && o.days.every(isServiceDay);

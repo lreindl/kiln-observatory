@@ -10,9 +10,9 @@ agent's record, drawn as rings of days with a dot for every event. Live events
 travel between the agents as packets of dots. `#studio` and `#agent-<id>`
 (for example `#agent-implementer`) link straight to a level.
 
-A fourth level, `#services`, shows the services the studio runs (Pin High and
+A fourth level, `#services`, shows the services the studio runs (Hole High and
 D2 Factory) laid out like the agents, each with its uptime: a column of dots
-per day, full when the day had no downtime.
+per day, full when the day had no downtime. Each name links to the game's site.
 
 It shows **activity only**: what the agents do, never what they write. The
 studio's repos are private; titles, bodies, numbers, branch names and money

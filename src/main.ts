@@ -355,7 +355,7 @@ function placeServices(): void {
       el = document.createElement("div");
       el.className = "agent-btn";
       el.setAttribute("role", "group");
-      el.innerHTML = `<span class="name"></span><span class="state"></span>`;
+      el.innerHTML = `<a class="name" target="_blank" rel="noopener"></a><span class="state"></span>`;
       $("service-rows").appendChild(el);
       svcRows.set(s.id, el);
     }
@@ -385,7 +385,10 @@ function refreshServices(): void {
     if (!el) continue;
     const pct = uptime(s);
     el.dataset.state = s.state ?? "unknown";
-    el.querySelector(".name")!.textContent = s.name;
+    const name = el.querySelector<HTMLAnchorElement>(".name")!;
+    name.textContent = s.name;
+    name.href = s.site;
+    name.setAttribute("aria-label", `${s.name}, opens ${new URL(s.site).host}`);
     el.querySelector(".state")!.textContent = s.state ? `${s.state}${pct ? ` · ${pct}` : ""}` : "not checked yet";
     el.setAttribute("aria-label", `${s.name}: ${s.state ?? "not checked yet"}${pct ? `, ${pct} uptime over ${sv.days} days` : ""}${s.checkedAt ? `, checked ${ago(s.checkedAt)}` : ""}`);
     el.title = s.checkedAt ? `checked ${ago(s.checkedAt)}` : "";

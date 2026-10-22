@@ -44,8 +44,8 @@ export function demoHistory(now: number): PublicEvent[] {
 /** Plausible uptime: mostly clean days, a couple with an outage. */
 export function demoServices(now: number): Service[] {
   const day = (ago: number) => new Date(now - ago * 86_400_000).toISOString().slice(0, 10);
-  const make = (id: string, name: string, bad: Record<number, [number, number]>, since: number): Service => ({
-    id, name, state: "up", checkedAt: new Date(now - 90_000).toISOString(),
+  const make = (id: string, name: string, site: string, bad: Record<number, [number, number]>, since: number): Service => ({
+    id, name, site, state: "up", checkedAt: new Date(now - 90_000).toISOString(),
     days: Array.from({ length: since }, (_, i) => since - 1 - i).map((ago) => {
       const checks = ago === 0 ? Math.floor(((now % 86_400_000) / 86_400_000) * 288) || 1 : 288;
       const [down, degraded] = bad[ago] ?? [0, 0];
@@ -53,7 +53,7 @@ export function demoServices(now: number): Service[] {
     }),
   });
   return [
-    make("pinhigh", "Pin High", { 4: [6, 0], 11: [0, 9] }, 30),
-    make("d2factory", "D2 Factory", { 1: [40, 0] }, 2),
+    make("pinhigh", "Hole High", "https://pinhigh.fun/", { 4: [6, 0], 11: [0, 9] }, 30),
+    make("d2factory", "D2 Factory", "https://d2factory.gamekiln.dev/", { 1: [40, 0] }, 2),
   ];
 }
