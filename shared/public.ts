@@ -3,7 +3,7 @@
 // or a value outside its allowed set, is dropped.
 
 export const AGENTS = [
-  "owner", "analyst", "ops", "growth", "quality", "pm",
+  "owner", "design", "analyst", "verdicts", "ops", "growth", "quality", "pm",
   "implementer", "reviewer", "release", "digest", "actions", "agent",
 ] as const;
 export type Agent = (typeof AGENTS)[number];
@@ -17,7 +17,7 @@ export const KINDS = [
 export type Kind = (typeof KINDS)[number];
 
 /** The `fn:` labels, without the prefix. */
-export const FUNCTIONS = ["engineering", "ops", "analyst", "pm", "growth", "quality"] as const;
+export const FUNCTIONS = ["engineering", "ops", "analyst", "verdicts", "design", "pm", "growth", "quality"] as const;
 export type Fn = (typeof FUNCTIONS)[number];
 
 /** Labels that mark where an item is: ready-for-agent, approval, ops, incident. */

@@ -188,21 +188,21 @@ export function studio(w: number, h: number, events: PublicEvent[] = [], now = D
 // research on the left, the PM gathering them, the build in the middle, the
 // owner and release on the right. Portrait screens turn it to flow downward.
 const SKY: Record<CellId, [number, number]> = {
-  growth: [-0.52, -0.78], analyst: [-0.82, -0.36], ops: [-0.92, 0.18], quality: [-0.6, 0.66],
-  pm: [-0.3, 0.02], implementer: [0.04, 0.4], digest: [0.18, -0.62], reviewer: [0.38, 0.06],
+  design: [-1.0, -0.66], growth: [-0.52, -0.78], analyst: [-0.78, -0.3], ops: [-0.96, 0.22], quality: [-0.6, 0.66],
+  verdicts: [-0.92, 0.9], pm: [-0.3, 0.02], implementer: [0.04, 0.4], digest: [0.18, -0.62], reviewer: [0.38, 0.06],
   owner: [0.66, -0.42], release: [0.88, 0.36],
 };
 const CORE: [number, number] = [0.5, 0.92];
 // Portrait: x across (-1..1), y down the page (0..1+).
 const SKY_TALL: Record<CellId, [number, number]> = {
-  ops: [-0.62, 0], analyst: [0.62, 0], quality: [-0.62, 0.15], growth: [0.62, 0.15],
-  pm: [-0.1, 0.32], digest: [0.66, 0.42], implementer: [-0.55, 0.5],
-  reviewer: [-0.05, 0.66], owner: [0.6, 0.8], release: [-0.5, 0.94],
+  design: [-0.62, 0], analyst: [0.62, 0], ops: [-0.62, 0.15], verdicts: [0.62, 0.15], quality: [-0.62, 0.3], growth: [0.62, 0.3],
+  pm: [-0.1, 0.47], digest: [0.66, 0.57], implementer: [-0.55, 0.65],
+  reviewer: [-0.05, 0.81], owner: [0.6, 0.95], release: [-0.5, 1.09],
 };
-const CORE_TALL: [number, number] = [0.25, 1.1];
+const CORE_TALL: [number, number] = [0.25, 1.25];
 /** The routes work is meant to take, drawn faintly whether or not anything has moved on them yet. */
 const LANES: [CellId | "core", CellId | "core"][] = [
-  ["analyst", "pm"], ["ops", "pm"], ["quality", "pm"], ["growth", "pm"], ["growth", "digest"], ["pm", "implementer"],
+  ["design", "analyst"], ["analyst", "pm"], ["verdicts", "pm"], ["ops", "pm"], ["quality", "pm"], ["growth", "pm"], ["growth", "digest"], ["pm", "implementer"],
   ["implementer", "reviewer"], ["reviewer", "owner"], ["digest", "owner"], ["owner", "release"], ["release", "core"],
 ];
 

@@ -20,6 +20,8 @@ const PAYLOADS: [string, unknown][] = [
   ["pull_request_review", { action: "submitted", sender: { login: "gk-agent" }, repository: repo(), review: { user: { login: "gk-agent" }, body: `Spec review: changes needed. ${SECRET_TEXT}`, submitted_at: "2026-10-12T17:10:00Z" }, pull_request: { number: 44, title: SECRET_TEXT } }],
   ["check_suite", { action: "completed", sender: { login: "github-actions[bot]" }, repository: repo(), check_suite: { conclusion: "failure", head_branch: "claude/43-secret-branch-name", head_commit: { message: SECRET_TEXT }, pull_requests: [{ number: 44 }], updated_at: "2026-10-12T15:35:00Z" } }],
   ["workflow_run", { action: "completed", sender: { login: "gk-agent" }, repository: repo(), workflow_run: { event: "workflow_dispatch", name: SECRET_TEXT, conclusion: "success", triggering_actor: { login: "gk-agent" }, head_commit: { message: SECRET_TEXT }, updated_at: "2026-10-12T16:30:00Z" } }],
+  ["pull_request", { action: "opened", sender: { login: "gk-agent" }, repository: repo("lreindl/game-kiln"), pull_request: { number: 46, title: `Verdict: ${SECRET_TEXT}`, body: SECRET_TEXT, head: { ref: "claude/verdicts-46-secret-sketch" }, labels: [label("fn:verdicts")], updated_at: "2026-10-22T10:20:00Z" } }],
+  ["issues", { action: "opened", sender: { login: "gk-agent" }, repository: repo("lreindl/game-kiln"), issue: { number: 47, title: `Idea brief: ${SECRET_TEXT}`, body: SECRET_TEXT, labels: [label("fn:design"), label("ready-for-agent")], updated_at: "2026-10-22T12:10:00Z" } }],
 ];
 
 describe("toPublicEvent", () => {
@@ -34,7 +36,7 @@ describe("toPublicEvent", () => {
 
   it("names who acted from the routine conventions", async () => {
     const out = await Promise.all(PAYLOADS.map(async ([n, p]) => (await toPublicEvent(n, p, await ctx()))!.actor));
-    expect(out).toEqual(["ops", "pm", "implementer", "owner", "reviewer", "actions", "release"]);
+    expect(out).toEqual(["ops", "pm", "implementer", "owner", "reviewer", "actions", "release", "verdicts", "design"]);
   });
 
   it("drops repos it doesn't cover, such as kiln-ideas", async () => {
@@ -68,4 +70,13 @@ describe("routineFor", () => {
   it("treats other people as unnamed", () => expect(routineFor("someone", { kind: "issue.opened" })).toBe("agent"));
   it("finds the analyst by branch", () => expect(routineFor("gk-agent", { kind: "pr.opened", branch: "claude/research-3-x" })).toBe("analyst"));
   it("finds the quality auditor by label", () => expect(routineFor("gk-agent", { kind: "issue.opened", labels: ["fn:quality"] })).toBe("quality"));
+  it.each(["claude/verdict-pact", "claude/retrospective-c01", "claude/verdicts-9-hole-high-d7"])("finds the verdicts analyst by branch %s", (branch) =>
+    expect(routineFor("gk-agent", { kind: "pr.opened", branch })).toBe("verdicts"));
+  it("finds the verdicts analyst by label", () => expect(routineFor("gk-agent", { kind: "issue.closed", labels: ["fn:verdicts"] })).toBe("verdicts"));
+  it("finds the designer by branch and by label", () => {
+    expect(routineFor("gk-agent", { kind: "pr.opened", branch: "claude/idea-word-ladder" })).toBe("design");
+    expect(routineFor("gk-agent", { kind: "issue.closed", labels: ["fn:design"] })).toBe("design");
+  });
+  it("lets a branch prefix win over a label", () =>
+    expect(routineFor("gk-agent", { kind: "pr.opened", branch: "claude/research-8-x", labels: ["fn:verdicts"] })).toBe("analyst"));
 });

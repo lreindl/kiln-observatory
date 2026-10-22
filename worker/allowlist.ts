@@ -28,6 +28,10 @@ export function routineFor(actor: string, hints: { kind: Kind; branch?: string; 
   const { kind, branch = "", labels = [], label } = hints;
   if (kind === "pr.reviewed") return "reviewer";
   if (branch.startsWith("claude/research-")) return "analyst";
+  // The Verdicts analyst (game-kiln ADR-0033): verdicts, retrospectives and readouts.
+  if (branch.startsWith("claude/verdict-") || branch.startsWith("claude/retrospective-") || branch.startsWith("claude/verdicts-")) return "verdicts";
+  // The Designer (ADR-0034) pushes only to kiln-ideas, which isn't covered; its briefs show by label below.
+  if (branch.startsWith("claude/idea-")) return "design";
   if (branch.startsWith("claude/growth-")) return "growth";
   if (branch.startsWith("claude/pm-")) return "pm";
   if (branch.startsWith("claude/release-")) return "release";
@@ -39,6 +43,8 @@ export function routineFor(actor: string, hints: { kind: Kind; branch?: string; 
   if (labels.includes("ops")) return "ops";
   if (labels.includes("fn:growth")) return "growth";
   if (labels.includes("fn:analyst")) return "analyst";
+  if (labels.includes("fn:verdicts")) return "verdicts";
+  if (labels.includes("fn:design")) return "design";
   if (labels.includes("ready-for-agent")) return "pm";
   return "agent";
 }
