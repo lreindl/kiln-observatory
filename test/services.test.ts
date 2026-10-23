@@ -1,5 +1,6 @@
-// The services contract (game-kiln ADR-0025): only each service's state and its
-// days of check counts leave the Worker. No URL, status code or timing.
+// The services contract (game-kiln ADR-0025): only each service's state, its
+// days of check counts and its public site leave the Worker. No checked URL,
+// status code or timing.
 
 import { describe, expect, it } from "vitest";
 import { isService, isServices, type Service } from "../shared/public";
@@ -7,12 +8,22 @@ import { uptimeDots } from "../src/levels";
 import { SERVICES, combine, probe, summarize, type CheckRow } from "../worker/services";
 
 const NOW = Date.parse("2026-10-14T12:00:00Z");
-const good: Service = { id: "pinhigh", name: "Pin High", state: "up", checkedAt: "2026-10-14T11:55:00.000Z", days: [{ day: "2026-10-14", checks: 144, up: 140, degraded: 2 }] };
+const good: Service = { id: "pinhigh", name: "Hole High", site: "https://pinhigh.fun/", state: "up", checkedAt: "2026-10-14T11:55:00.000Z", days: [{ day: "2026-10-14", checks: 144, up: 140, degraded: 2 }] };
 
 describe("the services contract", () => {
   it("accepts a well-formed service", () => {
     expect(isService(good)).toBe(true);
-    expect(isServices([good, { ...good, id: "d2factory", name: "D2 Factory", state: null, checkedAt: null, days: [] }])).toBe(true);
+    expect(isServices([good, { ...good, id: "d2factory", name: "D2 Factory", site: "https://d2factory.gamekiln.dev/", state: null, checkedAt: null, days: [] }])).toBe(true);
+  });
+
+  it("takes a site only as a bare https origin", () => {
+    expect(isService({ ...good, site: "https://pinhigh-api-production.lreindl01.workers.dev/daily" })).toBe(false);
+    expect(isService({ ...good, site: "http://pinhigh.fun/" })).toBe(false);
+    expect(isService({ ...good, site: "javascript:alert(1)//" })).toBe(false);
+    expect(isService({ ...good, site: "https://pinhigh.fun/?ref=x" })).toBe(false);
+    expect(isService({ ...good, site: "https://localhost/" })).toBe(false);
+    const { site: _, ...noSite } = good;
+    expect(isService(noSite)).toBe(false);
   });
 
   it("rejects anything that would carry more than the outcome", () => {
@@ -27,7 +38,9 @@ describe("the services contract", () => {
 
   it("names only what the Worker lists", () => {
     for (const s of summarize(SERVICES, [], NOW, 90)) expect(isService(s)).toBe(true);
-    expect(SERVICES.map((s) => s.name)).toEqual(["Pin High", "D2 Factory"]);
+    expect(SERVICES.map((s) => s.name)).toEqual(["Hole High", "D2 Factory"]);
+    // Each link is a site the Worker already checks, never the API.
+    for (const s of SERVICES) expect(s.checks).toContain(s.site);
   });
 });
 
@@ -62,7 +75,7 @@ describe("checks", () => {
       { day: "2026-10-13", checks: 1, up: 1, degraded: 0 },
       { day: "2026-10-14", checks: 3, up: 1, degraded: 1 },
     ]);
-    expect(d2).toEqual({ id: "d2factory", name: "D2 Factory", state: null, checkedAt: null, days: [] });
+    expect(d2).toEqual({ id: "d2factory", name: "D2 Factory", site: "https://d2factory.gamekiln.dev/", state: null, checkedAt: null, days: [] });
   });
 });
 

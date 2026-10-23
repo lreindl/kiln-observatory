@@ -4,7 +4,8 @@
 // when all answer, down when none do, and degraded in between.
 //
 // The URLs mirror each game's kiln.yaml (`site`, and the production `api`).
-// They stay in the Worker: only the outcome is public (game-kiln ADR-0025).
+// They stay in the Worker: only the outcome is public (game-kiln ADR-0025),
+// plus the site's address, which players already know, as a link.
 
 import type { Service, ServiceDay, ServiceState } from "../shared/public";
 
@@ -12,20 +13,25 @@ export interface ServiceSpec {
   id: string;
   /** Public name; naming a game here is the owner's call (ADR-0025, amended 2026-10-14). */
   name: string;
+  /** The public site the name links to: an origin, nothing after the slash. */
+  site: string;
   /** Every URL that must answer for the service to be up. */
   checks: string[];
 }
 
 export const SERVICES: ServiceSpec[] = [
   {
+    // The id stays "pinhigh" so the stored checks keep their history.
     id: "pinhigh",
-    name: "Pin High",
+    name: "Hole High",
+    site: "https://pinhigh.fun/",
     // The site, and today's Daily from the production API: what a player needs to play.
     checks: ["https://pinhigh.fun/", "https://pinhigh-api-production.lreindl01.workers.dev/daily"],
   },
   {
     id: "d2factory",
     name: "D2 Factory",
+    site: "https://d2factory.gamekiln.dev/",
     checks: ["https://d2factory.gamekiln.dev/"],
   },
 ];
@@ -67,6 +73,6 @@ export function summarize(specs: ServiceSpec[], rows: CheckRow[], now: number, d
       byDay.set(day, d);
     }
     const last = mine[mine.length - 1];
-    return { id: spec.id, name: spec.name, state: last?.state ?? null, checkedAt: last?.at ?? null, days: [...byDay.values()] };
+    return { id: spec.id, name: spec.name, site: spec.site, state: last?.state ?? null, checkedAt: last?.at ?? null, days: [...byDay.values()] };
   });
 }
