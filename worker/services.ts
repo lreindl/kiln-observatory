@@ -34,6 +34,19 @@ export const SERVICES: ServiceSpec[] = [
     site: "https://d2factory.gamekiln.dev/",
     checks: ["https://d2factory.gamekiln.dev/"],
   },
+  // The sketches (kiln-sketches, one Worker): each live sketch at its own subdomain.
+  {
+    id: "pact",
+    name: "Pact",
+    site: "https://pact.gamekiln.dev/",
+    checks: ["https://pact.gamekiln.dev/"],
+  },
+  {
+    id: "brick-breaker",
+    name: "Brick Breaker",
+    site: "https://brick-breaker.gamekiln.dev/",
+    checks: ["https://brick-breaker.gamekiln.dev/"],
+  },
 ];
 
 const TIMEOUT = 10_000;
