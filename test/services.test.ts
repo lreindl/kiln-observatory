@@ -38,7 +38,7 @@ describe("the services contract", () => {
 
   it("names only what the Worker lists", () => {
     for (const s of summarize(SERVICES, [], NOW, 90)) expect(isService(s)).toBe(true);
-    expect(SERVICES.map((s) => s.name)).toEqual(["Hole High", "D2 Factory"]);
+    expect(SERVICES.map((s) => s.name)).toEqual(["Hole High", "D2 Factory", "Pact", "Brick Breaker"]);
     // Each link is a site the Worker already checks, never the API.
     for (const s of SERVICES) expect(s.checks).toContain(s.site);
   });

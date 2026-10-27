@@ -118,6 +118,14 @@ export function glyph(id: string, cx: number, cy: number, r: number, step: numbe
       const pts = Array.from({ length: 6 }, (_, i) => ({ x: cx + Math.cos(-Math.PI / 2 + (i / 6) * Math.PI * 2) * r, y: cy + Math.sin(-Math.PI / 2 + (i / 6) * Math.PI * 2) * r }));
       return [...poly(pts, s), ...line({ x: cx, y: cy }, pts[0], s), ...line({ x: cx, y: cy }, pts[2], s), ...line({ x: cx, y: cy }, pts[4], s)];
     }
+    case "pact": // two rings linked: an alliance
+      return [...circle(cx - r * 0.38, cy, r * 0.62, s), ...circle(cx + r * 0.38, cy, r * 0.62, s)];
+    case "brick-breaker": { // two courses of bricks, a ball and the paddle under it
+      const bw = r * 0.62, bh = r * 0.36;
+      const bricks = [-1, 0, 1].flatMap((i) => rect(cx + i * bw - bw / 2, cy - r, bw, bh, s * 0.8))
+        .concat([-0.5, 0.5].flatMap((i) => rect(cx + i * bw - bw / 2, cy - r + bh, bw, bh, s * 0.8)));
+      return [...bricks, ...circle(cx + r * 0.2, cy + r * 0.3, r * 0.14, s * 0.6), ...line({ x: cx - r * 0.45, y: cy + r * 0.85 }, { x: cx + r * 0.45, y: cy + r * 0.85 }, s)];
+    }
     default:
       return circle(cx, cy, r, s);
   }
