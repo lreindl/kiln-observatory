@@ -65,7 +65,7 @@ function startDemo(h: FeedHandlers): number {
     ["verdicts", "pr.opened", { fn: "verdicts" }],
     ["growth", "issue.opened", { stage: "approval", fn: "growth" }],
     ["digest", "issue.closed"],
-    ["owner", "pr.merged"],
+    ["reviewer", "pr.merged"],
     ["release", "workflow.started"],
     ["release", "workflow.finished", { ok: true }],
   ];

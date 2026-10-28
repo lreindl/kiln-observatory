@@ -21,6 +21,7 @@ const PAYLOADS: [string, unknown][] = [
   ["check_suite", { action: "completed", sender: { login: "github-actions[bot]" }, repository: repo(), check_suite: { conclusion: "failure", head_branch: "claude/43-secret-branch-name", head_commit: { message: SECRET_TEXT }, pull_requests: [{ number: 44 }], updated_at: "2026-10-12T15:35:00Z" } }],
   ["workflow_run", { action: "completed", sender: { login: "gk-agent" }, repository: repo(), workflow_run: { event: "workflow_dispatch", name: SECRET_TEXT, conclusion: "success", triggering_actor: { login: "gk-agent" }, head_commit: { message: SECRET_TEXT }, updated_at: "2026-10-12T16:30:00Z" } }],
   ["pull_request", { action: "opened", sender: { login: "gk-agent" }, repository: repo("lreindl/game-kiln"), pull_request: { number: 46, title: `Verdict: ${SECRET_TEXT}`, body: SECRET_TEXT, head: { ref: "claude/verdicts-46-secret-sketch" }, labels: [label("fn:verdicts")], updated_at: "2026-10-22T10:20:00Z" } }],
+  ["pull_request", { action: "closed", sender: { login: "gk-spec-approver[bot]" }, repository: repo(), pull_request: { number: 48, title: SECRET_TEXT, merged: true, merged_by: { login: "gk-spec-approver[bot]", name: SECRET_TEXT }, head: { ref: "claude/43-secret-branch-name" }, labels: [], updated_at: "2026-10-27T18:00:00Z" } }],
   ["issues", { action: "opened", sender: { login: "gk-agent" }, repository: repo("lreindl/game-kiln"), issue: { number: 47, title: `Idea brief: ${SECRET_TEXT}`, body: SECRET_TEXT, labels: [label("fn:design"), label("ready-for-agent")], updated_at: "2026-10-22T12:10:00Z" } }],
 ];
 
@@ -36,7 +37,7 @@ describe("toPublicEvent", () => {
 
   it("names who acted from the routine conventions", async () => {
     const out = await Promise.all(PAYLOADS.map(async ([n, p]) => (await toPublicEvent(n, p, await ctx()))!.actor));
-    expect(out).toEqual(["ops", "pm", "implementer", "owner", "reviewer", "actions", "release", "verdicts", "design"]);
+    expect(out).toEqual(["ops", "pm", "implementer", "owner", "reviewer", "actions", "release", "verdicts", "reviewer", "design"]);
   });
 
   it("drops repos it doesn't cover, such as kiln-ideas", async () => {

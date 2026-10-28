@@ -203,7 +203,7 @@ const CORE_TALL: [number, number] = [0.25, 1.25];
 /** The routes work is meant to take, drawn faintly whether or not anything has moved on them yet. */
 const LANES: [CellId | "core", CellId | "core"][] = [
   ["design", "analyst"], ["analyst", "pm"], ["verdicts", "pm"], ["ops", "pm"], ["quality", "pm"], ["growth", "pm"], ["growth", "digest"], ["pm", "implementer"],
-  ["implementer", "reviewer"], ["reviewer", "owner"], ["digest", "owner"], ["owner", "release"], ["release", "core"],
+  ["implementer", "reviewer"], ["reviewer", "release"], ["digest", "owner"], ["owner", "release"], ["release", "core"],
 ];
 
 export function constellation(w: number, h: number, events: PublicEvent[] = [], now = Date.now(), _order?: CellId[]): Studio {

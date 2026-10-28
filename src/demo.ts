@@ -6,7 +6,7 @@ import { CELLS, type CellId } from "./crew";
 import { HISTORY_START } from "./levels";
 
 const KINDS: Partial<Record<CellId, Kind[]>> = {
-  owner: ["pr.merged", "pr.merged", "issue.closed"],
+  owner: ["pr.merged", "issue.closed"],
   release: ["workflow.started", "workflow.finished"],
   growth: ["issue.opened", "pr.opened"],
   ops: ["issue.opened", "issue.labelled"],
@@ -16,7 +16,7 @@ const KINDS: Partial<Record<CellId, Kind[]>> = {
   verdicts: ["pr.opened", "issue.closed"],
   pm: ["issue.labelled", "issue.labelled", "issue.opened"],
   implementer: ["pr.opened", "pr.updated", "pr.updated"],
-  reviewer: ["pr.reviewed", "pr.reviewed"],
+  reviewer: ["pr.reviewed", "pr.reviewed", "pr.merged"],
   digest: ["issue.labelled"],
 };
 

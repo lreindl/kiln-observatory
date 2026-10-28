@@ -70,9 +70,9 @@ export function flow(e: PublicEvent): [CellId | "core", CellId | "core"] {
   if (e.stage === "approval") return [from, "digest"];
   if (e.kind === "issue.opened" && ["ops", "quality", "analyst", "verdicts", "growth"].includes(from)) return [from, "pm"];
   if (e.kind === "issue.opened" && from === "design") return ["design", "analyst"];
-  if (e.kind === "pr.opened" || e.kind === "pr.updated") return [from, from === "implementer" ? "reviewer" : "owner"];
-  if (e.kind === "pr.reviewed") return ["reviewer", "owner"];
-  if (e.kind === "pr.merged") return ["owner", "release"];
+  if (e.kind === "pr.opened" || e.kind === "pr.updated") return [from, "reviewer"];
+  if (e.kind === "pr.reviewed") return ["reviewer", "core"];
+  if (e.kind === "pr.merged") return [from, "release"];
   if (e.kind.startsWith("check")) return ["core", "implementer"];
   if (e.kind.startsWith("workflow")) return ["release", "core"];
   if (from === "digest") return ["digest", "owner"];
