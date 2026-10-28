@@ -98,8 +98,9 @@ export async function toPublicEvent(name: string, p: any, ctx: MapContext): Prom
       : p.action === "closed" ? (pr?.merged ? "pr.merged" : "pr.closed")
       : undefined;
     if (!kind) return null;
-    // A merge is the owner's act; the PR's branch says whose work it was.
-    const actor = kind === "pr.merged" ? "owner" : routineFor(sender, { kind, branch, labels: labelNames(pr?.labels) });
+    // The owner merges what CODEOWNERS gives them; the studio's GitHub App merges the rest on the reviewer's pass (game-kiln ADR-0037).
+    const merger = str(pr?.merged_by?.login) || sender;
+    const actor = kind === "pr.merged" ? (merger === OWNER ? "owner" : "reviewer") : routineFor(sender, { kind, branch, labels: labelNames(pr?.labels) });
     event = { kind, actor, game, fn: fnOf(labelNames(pr?.labels)), item: await itemId(ctx.itemKey, repo, Number(pr?.number)), at: iso(pr?.updated_at) };
   } else if (name === "pull_request_review" && p.action === "submitted") {
     const actor = routineFor(str(p.review?.user?.login) || sender, { kind: "pr.reviewed" });

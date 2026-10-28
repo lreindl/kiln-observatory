@@ -16,7 +16,7 @@ export function fromIssue(repo: string, issue: any): Replay[] {
 export function fromPull(repo: string, pr: any): Replay[] {
   const base = { number: pr.number, head: { ref: pr.head?.ref }, labels: pr.labels };
   const out: Replay[] = [["pull_request", { action: "opened", sender: { login: pr.user?.login }, repository: { full_name: repo }, pull_request: { ...base, updated_at: pr.created_at } }]];
-  if (pr.merged_at) out.push(["pull_request", { action: "closed", sender: { login: "lreindl" }, repository: { full_name: repo }, pull_request: { ...base, merged: true, updated_at: pr.merged_at } }]);
+  if (pr.merged_at) out.push(["pull_request", { action: "closed", sender: { login: "lreindl" }, repository: { full_name: repo }, pull_request: { ...base, merged: true, merged_by: pr.merged_by, updated_at: pr.merged_at } }]);
   return out;
 }
 
