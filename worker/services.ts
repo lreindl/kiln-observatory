@@ -47,6 +47,24 @@ export const SERVICES: ServiceSpec[] = [
     site: "https://brick-breaker.gamekiln.dev/",
     checks: ["https://brick-breaker.gamekiln.dev/"],
   },
+  {
+    id: "coast",
+    name: "Coast",
+    site: "https://coast.gamekiln.dev/",
+    checks: ["https://coast.gamekiln.dev/"],
+  },
+  {
+    id: "warmer",
+    name: "Warmer",
+    site: "https://warmer.gamekiln.dev/",
+    checks: ["https://warmer.gamekiln.dev/"],
+  },
+  {
+    id: "muster",
+    name: "Muster",
+    site: "https://muster.gamekiln.dev/",
+    checks: ["https://muster.gamekiln.dev/"],
+  },
 ];
 
 const TIMEOUT = 10_000;
