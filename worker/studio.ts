@@ -6,9 +6,9 @@ import { DurableObject } from "cloudflare:workers";
 import { isCounts, isPublicEvent, isServices, type Counts, type PublicEvent, type ServerMessage, type Service, type ServiceState, type Snapshot } from "../shared/public";
 import { toPublicEvent, itemKey } from "./allowlist";
 import { history } from "./backfill";
-import { fetchCounts, fetchCoveredRepos } from "./github";
+import { coveredRepos, fetchCounts, fetchGames } from "./github";
 import type { Env } from "./index";
-import { SERVICES, combine, probe, summarize, type CheckRow } from "./services";
+import { GAMES, combine, probe, shown, sketchServices, summarize, type CheckRow, type ServiceSpec } from "./services";
 
 const RECENT = 40;
 const HISTORY_LIMIT = 5000;
@@ -111,9 +111,10 @@ export class Studio extends DurableObject<Env> {
     if (!token) return;
     try {
       const named = (this.env.NAMED_GAMES ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-      const games = await fetchCoveredRepos(token, this.env.FACTORY_REPO, named);
+      const entries = await fetchGames(token, this.env.FACTORY_REPO);
+      const games = coveredRepos(entries, this.env.FACTORY_REPO, named);
+      await this.ctx.storage.put({ games, sketches: sketchServices(entries), updatedAt: new Date().toISOString() });
       const counts = await fetchCounts(token, [...games.keys()]);
-      await this.ctx.storage.put({ games, updatedAt: new Date().toISOString() });
       if (isCounts(counts)) {
         await this.ctx.storage.put("counts", counts);
         this.broadcast({ type: "counts", counts });
@@ -151,24 +152,33 @@ export class Studio extends DurableObject<Env> {
     }
     await this.ctx.storage.put("checkedAt", Date.now());
     await this.ensureAlarm(CHECK_EVERY);
+    // The sketches come from games.yaml; a studio that hasn't read it yet reads it first.
+    if (!(await this.ctx.storage.get("sketches"))) await this.reconcile();
+    const specs = await this.specs();
     const at = new Date().toISOString();
-    const states = await Promise.all(SERVICES.map(async (s) => combine(await Promise.all(s.checks.map((u) => probe(u))))));
-    SERVICES.forEach((s, i) => this.ctx.storage.sql.exec("INSERT OR REPLACE INTO checks (service, at, state) VALUES (?, ?, ?)", s.id, at, states[i]));
+    const states = await Promise.all(specs.map(async (s) => combine(await Promise.all(s.checks.map((u) => probe(u))))));
+    specs.forEach((s, i) => this.ctx.storage.sql.exec("INSERT OR REPLACE INTO checks (service, at, state) VALUES (?, ?, ?)", s.id, at, states[i]));
     this.ctx.storage.sql.exec("DELETE FROM checks WHERE at < ?", new Date(Date.now() - (UPTIME_DAYS + 1) * 86_400_000).toISOString());
-    const services = this.view();
+    const services = this.view(specs);
     if (isServices(services)) this.broadcast({ type: "services", services });
   }
 
   /** Each service's latest state and its days of checks; starts the checks if they have stopped. */
   async services(): Promise<Service[]> {
     if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(Date.now() + 1000);
-    return this.view();
+    return this.view(await this.specs());
   }
 
-  private view(): Service[] {
+  /** The games, then the sketches games.yaml listed at the last reconcile. */
+  private async specs(): Promise<ServiceSpec[]> {
+    return [...GAMES, ...((await this.ctx.storage.get<ServiceSpec[]>("sketches")) ?? [])];
+  }
+
+  private view(specs: ServiceSpec[]): Service[] {
     const since = new Date(Date.now() - UPTIME_DAYS * 86_400_000).toISOString();
-    const rows = this.ctx.storage.sql.exec<{ service: string; at: string; state: string }>("SELECT service, at, state FROM checks WHERE at >= ?", since).toArray();
-    const out = summarize(SERVICES, rows.map((r) => ({ ...r, state: r.state as ServiceState }) satisfies CheckRow), Date.now(), UPTIME_DAYS);
+    const rows = this.ctx.storage.sql.exec<{ service: string; at: string; state: string }>("SELECT service, at, state FROM checks WHERE at >= ?", since).toArray()
+      .map((r) => ({ ...r, state: r.state as ServiceState }) satisfies CheckRow);
+    const out = summarize(shown(specs, rows), rows, Date.now(), UPTIME_DAYS);
     return isServices(out) ? out : []; // the contract is checked again at the last step
   }
 

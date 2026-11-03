@@ -126,6 +126,18 @@ export function glyph(id: string, cx: number, cy: number, r: number, step: numbe
         .concat([-0.5, 0.5].flatMap((i) => rect(cx + i * bw - bw / 2, cy - r + bh, bw, bh, s * 0.8)));
       return [...bricks, ...circle(cx + r * 0.2, cy + r * 0.3, r * 0.14, s * 0.6), ...line({ x: cx - r * 0.45, y: cy + r * 0.85 }, { x: cx + r * 0.45, y: cy + r * 0.85 }, s)];
     }
+    case "coast": // a puck sliding across the ice to the ring
+      return [
+        ...circle(cx + r * 0.45, cy, r * 0.5, s), ...circle(cx - r * 0.75, cy, r * 0.2, s * 0.6),
+        ...line({ x: cx - r * 0.5, y: cy }, { x: cx - r * 0.1, y: cy }, s * 0.8),
+      ];
+    case "warmer": { // a row of five letter tiles, two of them marked
+      const tw = r * 0.38, gap = r * 0.06;
+      return [-2, -1, 0, 1, 2].flatMap((i) => rect(cx + i * (tw + gap) - tw / 2, cy - tw / 2, tw, tw, s * 0.7))
+        .concat([{ x: cx - (tw + gap), y: cy }, { x: cx + 2 * (tw + gap), y: cy }]);
+    }
+    case "muster": // two lines of three pieces facing each other
+      return [-1, 0, 1].flatMap((i) => [...circle(cx - r * 0.6, cy + i * r * 0.6, r * 0.2, s * 0.6), ...circle(cx + r * 0.6, cy + i * r * 0.6, r * 0.2, s * 0.6)]);
     default:
       return circle(cx, cy, r, s);
   }

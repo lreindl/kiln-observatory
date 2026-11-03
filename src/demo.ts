@@ -57,5 +57,8 @@ export function demoServices(now: number): Service[] {
     make("d2factory", "D2 Factory", "https://d2factory.gamekiln.dev/", { 1: [40, 0] }, 2),
     make("pact", "Pact", "https://pact.gamekiln.dev/", {}, 1),
     make("brick-breaker", "Brick Breaker", "https://brick-breaker.gamekiln.dev/", {}, 1),
+    make("coast", "Coast", "https://coast.gamekiln.dev/", {}, 1),
+    make("warmer", "Warmer", "https://warmer.gamekiln.dev/", {}, 1),
+    make("muster", "Muster", "https://muster.gamekiln.dev/", {}, 1),
   ];
 }

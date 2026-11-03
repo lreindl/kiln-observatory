@@ -6,8 +6,13 @@
 // The URLs mirror each game's kiln.yaml (`site`, and the production `api`).
 // They stay in the Worker: only the outcome is public (game-kiln ADR-0025),
 // plus the site's address, which players already know, as a link.
+//
+// The games with a repo of their own are listed here. The sketches come from
+// game-kiln's games.yaml (one copy of each fact), so a launched sketch shows
+// without a change here; sketch launches are approved as a kind, by name
+// (game-kiln#115).
 
-import type { Service, ServiceDay, ServiceState } from "../shared/public";
+import { GAME_LABEL, type Service, type ServiceDay, type ServiceState } from "../shared/public";
 
 export interface ServiceSpec {
   id: string;
@@ -19,7 +24,7 @@ export interface ServiceSpec {
   checks: string[];
 }
 
-export const SERVICES: ServiceSpec[] = [
+export const GAMES: ServiceSpec[] = [
   {
     // The id stays "pinhigh" so the stored checks keep their history.
     id: "pinhigh",
@@ -34,20 +39,41 @@ export const SERVICES: ServiceSpec[] = [
     site: "https://d2factory.gamekiln.dev/",
     checks: ["https://d2factory.gamekiln.dev/"],
   },
-  // The sketches (kiln-sketches, one Worker): each live sketch at its own subdomain.
-  {
-    id: "pact",
-    name: "Pact",
-    site: "https://pact.gamekiln.dev/",
-    checks: ["https://pact.gamekiln.dev/"],
-  },
-  {
-    id: "brick-breaker",
-    name: "Brick Breaker",
-    site: "https://brick-breaker.gamekiln.dev/",
-    checks: ["https://brick-breaker.gamekiln.dev/"],
-  },
 ];
+
+/** The public contract takes at most this many services (`isServices`). */
+const MAX_SERVICES = 12;
+const SKETCH_ID = /^[a-z0-9][a-z0-9-]{0,39}$/;
+
+export interface GameEntry { id?: string; name?: string; repo?: string; path?: string }
+
+/**
+ * The sketches in games.yaml (the entries with a `path` in the sketches repo),
+ * each checked at <id>.gamekiln.dev: a sketch's subdomain is its id. Each shows
+ * its name before any subtitle ("Pact: Daily Diplomacy" is "Pact"), which fits
+ * the row. In games.yaml order, keeping the newest when there are more than the
+ * contract takes.
+ */
+export function sketchServices(games: GameEntry[]): ServiceSpec[] {
+  const out: ServiceSpec[] = [];
+  for (const g of games) {
+    const name = g.name?.split(":")[0].trim();
+    if (!g.path || !g.id || !SKETCH_ID.test(g.id) || !name || !GAME_LABEL.test(name)) continue;
+    const site = `https://${g.id}.gamekiln.dev/`;
+    out.push({ id: g.id, name, site, checks: [site] });
+  }
+  return out.slice(-(MAX_SERVICES - GAMES.length));
+}
+
+/**
+ * A sketch is in games.yaml from the day it's started, but its address answers
+ * only once it launches, so a sketch shows after a check has found it answering.
+ * The games always show.
+ */
+export function shown(specs: ServiceSpec[], rows: CheckRow[]): ServiceSpec[] {
+  const answered = new Set(rows.filter((r) => r.state !== "down").map((r) => r.service));
+  return specs.filter((s) => GAMES.some((g) => g.id === s.id) || answered.has(s.id));
+}
 
 const TIMEOUT = 10_000;
 const DAY = 86_400_000;
