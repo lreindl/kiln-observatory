@@ -13,7 +13,7 @@ README first.
 - **No credential in the site or the repo.** Secrets live in the Worker
   (`wrangler secret put`), set by the owner.
 - **The owner merges every PR.** Work on a branch; never push to `main`.
-- **One copy of each fact:** the game list comes from game-kiln's `games.yaml`
+- **One copy of each fact:** the game list, and the sketches on the services level, come from game-kiln's `games.yaml`
   at runtime. The station list in `src/crew.ts` mirrors the routines in
   game-kiln's `CLAUDE.md`; when a routine is added or renamed there, update it.
 - Pin dependency versions exactly, to releases at least two weeks old.

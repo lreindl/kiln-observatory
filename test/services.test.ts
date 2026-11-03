@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import { isService, isServices, type Service } from "../shared/public";
 import { uptimeDots } from "../src/levels";
-import { SERVICES, combine, probe, summarize, type CheckRow } from "../worker/services";
+import { GAMES, combine, probe, shown, sketchServices, summarize, type CheckRow, type GameEntry } from "../worker/services";
 
 const NOW = Date.parse("2026-10-14T12:00:00Z");
 const good: Service = { id: "pinhigh", name: "Hole High", site: "https://pinhigh.fun/", state: "up", checkedAt: "2026-10-14T11:55:00.000Z", days: [{ day: "2026-10-14", checks: 144, up: 140, degraded: 2 }] };
@@ -37,10 +37,56 @@ describe("the services contract", () => {
   });
 
   it("names only what the Worker lists", () => {
-    for (const s of summarize(SERVICES, [], NOW, 90)) expect(isService(s)).toBe(true);
-    expect(SERVICES.map((s) => s.name)).toEqual(["Hole High", "D2 Factory", "Pact", "Brick Breaker", "Coast", "Warmer", "Muster"]);
+    const all = [...GAMES, ...sketchServices(GAMES_YAML)];
+    for (const s of summarize(all, [], NOW, 90)) expect(isService(s)).toBe(true);
+    expect(GAMES.map((s) => s.name)).toEqual(["Hole High", "D2 Factory"]);
     // Each link is a site the Worker already checks, never the API.
-    for (const s of SERVICES) expect(s.checks).toContain(s.site);
+    for (const s of all) expect(s.checks).toContain(s.site);
+  });
+});
+
+// The shape of game-kiln's games.yaml: games with a repo of their own, and sketches with a path in the sketches repo.
+const GAMES_YAML: GameEntry[] = [
+  { id: "pinhigh", name: "Pin High: Daily Golf", repo: "lreindl/pinhigh" },
+  { id: "d2factory", name: "D2 Factory", repo: "lreindl/d2factory" },
+  { id: "pact", name: "Pact: Daily Diplomacy", repo: "lreindl/kiln-sketches", path: "sketches/pact" },
+  { id: "brick-breaker", name: "Brick Breaker", repo: "lreindl/kiln-sketches", path: "sketches/brick-breaker" },
+];
+
+describe("the sketches from games.yaml", () => {
+  it("checks each sketch at its own subdomain, under its name without the subtitle", () => {
+    expect(sketchServices(GAMES_YAML)).toEqual([
+      { id: "pact", name: "Pact", site: "https://pact.gamekiln.dev/", checks: ["https://pact.gamekiln.dev/"] },
+      { id: "brick-breaker", name: "Brick Breaker", site: "https://brick-breaker.gamekiln.dev/", checks: ["https://brick-breaker.gamekiln.dev/"] },
+    ]);
+  });
+
+  it("skips an entry whose id or name couldn't be a public label or a subdomain", () => {
+    const sketch = { repo: "lreindl/kiln-sketches", path: "sketches/x" };
+    expect(sketchServices([
+      { ...sketch, id: "evil.example.com/x", name: "Evil" },
+      { ...sketch, id: "Caps", name: "Caps" },
+      { ...sketch, id: "tagged", name: "<script>alert(1)</script>" },
+      { ...sketch, id: "nameless" },
+    ])).toEqual([]);
+  });
+
+  it("keeps the newest sketches when there are more than the contract takes", () => {
+    const many = Array.from({ length: 15 }, (_, i) => ({ id: `s${i}`, name: `S${i}`, repo: "lreindl/kiln-sketches", path: `sketches/s${i}` }));
+    const specs = sketchServices(many);
+    expect(specs.map((s) => s.id)).toEqual(many.slice(5).map((g) => g.id));
+    expect(isServices(summarize([...GAMES, ...specs], [], NOW, 90))).toBe(true);
+  });
+
+  it("shows a sketch only once its site has answered; the games always", () => {
+    const specs = [...GAMES, ...sketchServices(GAMES_YAML)];
+    const rows: CheckRow[] = [
+      { service: "pact", at: "2026-10-14T00:00:00.000Z", state: "down" },
+      { service: "pact", at: "2026-10-14T00:05:00.000Z", state: "up" },
+      { service: "brick-breaker", at: "2026-10-14T00:05:00.000Z", state: "down" },
+    ];
+    expect(shown(specs, rows).map((s) => s.id)).toEqual(["pinhigh", "d2factory", "pact"]);
+    expect(shown(specs, []).map((s) => s.id)).toEqual(["pinhigh", "d2factory"]);
   });
 });
 
@@ -68,7 +114,7 @@ describe("checks", () => {
       { service: "pinhigh", at: "2026-01-01T00:00:00.000Z", state: "down" }, // older than the window
       { service: "elsewhere", at: "2026-10-14T00:10:00.000Z", state: "down" },
     ];
-    const [pin, d2] = summarize(SERVICES, rows, NOW, 90);
+    const [pin, d2] = summarize(GAMES, rows, NOW, 90);
     expect(pin.state).toBe("up");
     expect(pin.checkedAt).toBe("2026-10-14T00:10:00.000Z");
     expect(pin.days).toEqual([

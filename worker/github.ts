@@ -3,6 +3,7 @@
 
 import { parse } from "yaml";
 import { GAME_LABEL, type Counts } from "../shared/public";
+import type { GameEntry } from "./services";
 
 const API = "https://api.github.com";
 
@@ -10,17 +11,22 @@ function headers(token: string, accept = "application/vnd.github+json"): Headers
   return { Authorization: `Bearer ${token}`, Accept: accept, "User-Agent": "kiln-observatory", "X-GitHub-Api-Version": "2022-11-28" };
 }
 
+/** The games listed in the factory repo's games.yaml. */
+export async function fetchGames(token: string, factoryRepo: string): Promise<GameEntry[]> {
+  const res = await fetch(`${API}/repos/${factoryRepo}/contents/games.yaml`, { headers: headers(token, "application/vnd.github.raw+json") });
+  if (!res.ok) throw new Error(`games.yaml: GitHub returned ${res.status}`);
+  const doc = parse(await res.text()) as { games?: GameEntry[] };
+  return Array.isArray(doc.games) ? doc.games : [];
+}
+
 /**
  * Covered repos to their public label: the factory repo is "factory"; each game
  * is "game-N" in games.yaml order unless its id is in `named` (its store
  * listing is public), when it shows its name.
  */
-export async function fetchCoveredRepos(token: string, factoryRepo: string, named: string[]): Promise<Map<string, string>> {
-  const res = await fetch(`${API}/repos/${factoryRepo}/contents/games.yaml`, { headers: headers(token, "application/vnd.github.raw+json") });
-  if (!res.ok) throw new Error(`games.yaml: GitHub returned ${res.status}`);
-  const doc = parse(await res.text()) as { games?: { id?: string; name?: string; repo?: string }[] };
+export function coveredRepos(games: GameEntry[], factoryRepo: string, named: string[]): Map<string, string> {
   const covered = new Map([[factoryRepo, "factory"]]);
-  (doc.games ?? []).forEach((g, i) => {
+  games.forEach((g, i) => {
     if (!g.repo) return;
     const name = g.id && named.includes(g.id) && g.name && GAME_LABEL.test(g.name) ? g.name : `game-${i + 1}`;
     covered.set(g.repo, name);
